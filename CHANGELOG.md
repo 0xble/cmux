@@ -2,6 +2,11 @@
 
 All notable changes to cmux are documented here.
 
+## [Unreleased]
+
+### Added
+- Workspace: add `Option+Command+P` to pin or unpin the current workspace from the keyboard
+
 ## [0.62.1] - 2026-03-13
 
 ### Added
