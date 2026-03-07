@@ -132,8 +132,9 @@ For more info on how to configure cmux, [head over to our docs](https://cmux.dev
 | ⌘ 9 | Jump to last workspace |
 | ⌃ ⌘ ] | Next workspace |
 | ⌃ ⌘ [ | Previous workspace |
-| ⌘ ⇧ W | Close workspace |
 | ⌘ ⇧ R | Rename workspace |
+| ⌥ ⌘ P | Pin or unpin workspace |
+| ⌘ ⇧ W | Close workspace |
 | ⌘ B | Toggle sidebar |
 
 ### Surfaces

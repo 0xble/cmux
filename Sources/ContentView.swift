@@ -4298,6 +4298,8 @@ struct ContentView: View {
             return .renameTab
         case "palette.renameWorkspace":
             return .renameWorkspace
+        case "palette.toggleWorkspacePin":
+            return .toggleWorkspacePin
         case "palette.nextWorkspace":
             return .nextSidebarTab
         case "palette.previousWorkspace":
@@ -10419,14 +10421,27 @@ private struct TabItemView: View, Equatable {
             single: String(localized: "contextMenu.markWorkspaceUnread", defaultValue: "Mark Workspace as Unread"),
             isMulti: isMulti)
         let renameWorkspaceShortcut = KeyboardShortcutSettings.shortcut(for: .renameWorkspace)
+        let toggleWorkspacePinShortcut = KeyboardShortcutSettings.shortcut(for: .toggleWorkspacePin)
         let closeWorkspaceShortcut = KeyboardShortcutSettings.shortcut(for: .closeWorkspace)
-        Button(pinLabel) {
-            for id in targetIds {
-                if let tab = tabManager.tabs.first(where: { $0.id == id }) {
-                    tabManager.setPinned(tab, pinned: shouldPin)
+        if let key = toggleWorkspacePinShortcut.keyEquivalent {
+            Button(pinLabel) {
+                for id in targetIds {
+                    if let tab = tabManager.tabs.first(where: { $0.id == id }) {
+                        tabManager.setPinned(tab, pinned: shouldPin)
+                    }
                 }
+                syncSelectionAfterMutation()
             }
-            syncSelectionAfterMutation()
+            .keyboardShortcut(key, modifiers: toggleWorkspacePinShortcut.eventModifiers)
+        } else {
+            Button(pinLabel) {
+                for id in targetIds {
+                    if let tab = tabManager.tabs.first(where: { $0.id == id }) {
+                        tabManager.setPinned(tab, pinned: shouldPin)
+                    }
+                }
+                syncSelectionAfterMutation()
+            }
         }
 
         if let key = renameWorkspaceShortcut.keyEquivalent {
