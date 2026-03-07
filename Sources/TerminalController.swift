@@ -806,6 +806,12 @@ class TerminalController {
         case "report_pwd":
             return reportPwd(args)
 
+        case "report_ai_session":
+            return reportAISession(args)
+
+        case "clear_ai_session":
+            return clearAISession(args)
+
         case "sidebar_state":
             return sidebarState(args)
 
@@ -12386,6 +12392,46 @@ class TerminalController {
             tabManager.updateSurfaceDirectory(tabId: tab.id, surfaceId: surfaceId, directory: directory)
         }
         return result
+    }
+
+    private func reportAISession(_ args: String) -> String {
+        let parsed = parseOptions(args)
+        guard parsed.positional.count >= 2 else {
+            return "ERROR: Missing provider or session id — usage: report_ai_session <provider> <session-id> --tab=X --panel=Y"
+        }
+        guard let scope = Self.explicitSocketScope(options: parsed.options) else {
+            return "ERROR: Missing tab or panel id — usage: report_ai_session <provider> <session-id> --tab=X --panel=Y"
+        }
+
+        let provider = parsed.positional[0].trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let sessionId = parsed.positional[1].trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !provider.isEmpty, !sessionId.isEmpty else {
+            return "ERROR: Missing provider or session id — usage: report_ai_session <provider> <session-id> --tab=X --panel=Y"
+        }
+
+        DispatchQueue.main.async {
+            guard let tabManager = AppDelegate.shared?.tabManagerFor(tabId: scope.workspaceId) else { return }
+            tabManager.updateSurfaceAssistantSession(
+                tabId: scope.workspaceId,
+                surfaceId: scope.panelId,
+                provider: provider,
+                sessionId: sessionId
+            )
+        }
+        return "OK"
+    }
+
+    private func clearAISession(_ args: String) -> String {
+        let parsed = parseOptions(args)
+        guard let scope = Self.explicitSocketScope(options: parsed.options) else {
+            return "ERROR: Missing tab or panel id — usage: clear_ai_session --tab=X --panel=Y"
+        }
+
+        DispatchQueue.main.async {
+            guard let tabManager = AppDelegate.shared?.tabManagerFor(tabId: scope.workspaceId) else { return }
+            tabManager.clearSurfaceAssistantSession(tabId: scope.workspaceId, surfaceId: scope.panelId)
+        }
+        return "OK"
     }
 
     private func clearPorts(_ args: String) -> String {

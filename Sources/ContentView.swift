@@ -1222,6 +1222,7 @@ struct ContentView: View {
     @State private var titlebarThemeGeneration: UInt64 = 0
     @State private var sidebarDraggedTabId: UUID?
     @State private var titlebarTextUpdateCoalescer = NotificationBurstCoalescer(delay: 1.0 / 30.0)
+    @StateObject private var assistantSessionModel = TitlebarAssistantSessionModel()
     @State private var sidebarResizerCursorReleaseWorkItem: DispatchWorkItem?
     @State private var sidebarResizerPointerMonitor: Any?
     @State private var isResizerBandActive = false
@@ -1764,7 +1765,7 @@ struct ContentView: View {
 
     /// Space at top of content area for the titlebar. This must be at least the actual titlebar
     /// height; otherwise controls like Bonsplit tab dragging can be interpreted as window drags.
-    @State private var titlebarPadding: CGFloat = 32
+    @State private var titlebarPadding: CGFloat = 36
 
     private var terminalContent: some View {
         let mountedWorkspaceIdSet = Set(mountedWorkspaceIds)
@@ -1895,8 +1896,22 @@ struct ContentView: View {
 
                 Spacer()
 
+                if let assistantSession = assistantSessionModel.session {
+                    AssistantSessionHeaderButton(session: assistantSession) { action in
+                        switch action {
+                        case .copy:
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(assistantSession.sessionId, forType: .string)
+                        case .fork:
+                            _ = tabManager.forkActiveAssistantSession(assistantSession)
+                        }
+                    }
+                    .padding(.vertical, 3)
+                    .frame(maxWidth: 340, alignment: .trailing)
+                }
+
             }
-            .frame(height: 28)
+            .frame(height: 32)
             .padding(.top, 2)
             .padding(.leading, (isFullScreen && !sidebarState.isVisible) ? 8 : (sidebarState.isVisible ? 12 : titlebarLeadingInset + CGFloat(debugTitlebarLeadingExtra)))
             .padding(.trailing, 8)
@@ -1909,6 +1924,9 @@ struct ContentView: View {
             Rectangle()
                 .fill(Color(nsColor: .separatorColor))
                 .frame(height: 1)
+        }
+        .onAppear {
+            assistantSessionModel.bind(to: tabManager)
         }
     }
 

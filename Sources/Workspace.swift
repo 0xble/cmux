@@ -966,6 +966,7 @@ final class Workspace: Identifiable, ObservableObject {
     @Published var progress: SidebarProgressState?
     @Published var gitBranch: SidebarGitBranchState?
     @Published var panelGitBranches: [UUID: SidebarGitBranchState] = [:]
+    @Published var panelAssistantSessions: [UUID: AssistantSessionSnapshot] = [:]
     @Published var pullRequest: SidebarPullRequestState?
     @Published var panelPullRequests: [UUID: SidebarPullRequestState] = [:]
     @Published var surfaceListeningPorts: [UUID: [Int]] = [:]
@@ -1543,6 +1544,28 @@ final class Workspace: Identifiable, ObservableObject {
         }
     }
 
+    func updatePanelAssistantSession(panelId: UUID, provider: String, sessionId: String) {
+        guard panels[panelId] is TerminalPanel else { return }
+
+        let normalizedProvider = provider.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalizedSessionId = sessionId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedProvider.isEmpty, !normalizedSessionId.isEmpty else { return }
+
+        let snapshot = AssistantSessionSnapshot(provider: normalizedProvider, sessionId: normalizedSessionId)
+        if panelAssistantSessions[panelId] != snapshot {
+            panelAssistantSessions[panelId] = snapshot
+        }
+    }
+
+    func clearPanelAssistantSession(panelId: UUID) {
+        panelAssistantSessions.removeValue(forKey: panelId)
+    }
+
+    func activeAssistantSession() -> AssistantSessionSnapshot? {
+        guard let panelId = focusedPanelId, panels[panelId] is TerminalPanel else { return nil }
+        return panelAssistantSessions[panelId]
+    }
+
     @discardableResult
     func updatePanelTitle(panelId: UUID, title: String) -> Bool {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1591,6 +1614,7 @@ final class Workspace: Identifiable, ObservableObject {
         manualUnreadMarkedAt = manualUnreadMarkedAt.filter { validSurfaceIds.contains($0.key) }
         surfaceListeningPorts = surfaceListeningPorts.filter { validSurfaceIds.contains($0.key) }
         surfaceTTYNames = surfaceTTYNames.filter { validSurfaceIds.contains($0.key) }
+        panelAssistantSessions = panelAssistantSessions.filter { validSurfaceIds.contains($0.key) }
         panelPullRequests = panelPullRequests.filter { validSurfaceIds.contains($0.key) }
         recomputeListeningPorts()
     }
@@ -3741,6 +3765,7 @@ extension Workspace: BonsplitDelegate {
         panelDirectories.removeValue(forKey: panelId)
         panelGitBranches.removeValue(forKey: panelId)
         panelPullRequests.removeValue(forKey: panelId)
+        panelAssistantSessions.removeValue(forKey: panelId)
         panelTitles.removeValue(forKey: panelId)
         panelCustomTitles.removeValue(forKey: panelId)
         pinnedPanelIds.remove(panelId)

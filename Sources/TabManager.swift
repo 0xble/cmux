@@ -968,6 +968,38 @@ class TabManager: ObservableObject {
         tab.updatePanelDirectory(panelId: surfaceId, directory: normalized)
     }
 
+    func updateSurfaceAssistantSession(tabId: UUID, surfaceId: UUID, provider: String, sessionId: String) {
+        guard let tab = tabs.first(where: { $0.id == tabId }) else { return }
+        tab.updatePanelAssistantSession(panelId: surfaceId, provider: provider, sessionId: sessionId)
+    }
+
+    func clearSurfaceAssistantSession(tabId: UUID, surfaceId: UUID) {
+        guard let tab = tabs.first(where: { $0.id == tabId }) else { return }
+        tab.clearPanelAssistantSession(panelId: surfaceId)
+    }
+
+    @discardableResult
+    func forkActiveAssistantSession(_ session: AssistantSessionSnapshot) -> UUID? {
+        guard assistantSessionCanFork(provider: session.provider),
+              let workspace = selectedWorkspace,
+              let focusedPanelId = workspace.focusedPanelId,
+              let paneId = workspace.paneId(forPanelId: focusedPanelId) else {
+            return nil
+        }
+
+        let workingDirectory = workspace.panelDirectories[focusedPanelId] ?? workspace.currentDirectory
+        guard let newPanel = workspace.newTerminalSurface(
+            inPane: paneId,
+            focus: true,
+            workingDirectory: workingDirectory
+        ) else {
+            return nil
+        }
+
+        newPanel.sendText("ai fork \(session.sessionId)\r")
+        return newPanel.id
+    }
+
     private func normalizeDirectory(_ directory: String) -> String {
         let trimmed = directory.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return directory }

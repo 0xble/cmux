@@ -61,6 +61,7 @@ Sidebar shows git branch, linked PR status/number, working directory, listening 
 </table>
 
 - **Scriptable** — CLI and socket API to create workspaces, split panes, send keystrokes, and automate the browser
+- **AI-aware titlebar** — `ai` can report the live session for the current surface so cmux can show the active session ID in the header without scraping provider files
 - **Native macOS app** — Built with Swift and AppKit, not Electron. Fast startup, low memory.
 - **Ghostty compatible** — Reads your existing `~/.config/ghostty/config` for themes, fonts, and colors
 - **GPU-accelerated** — Powered by libghostty for smooth rendering
