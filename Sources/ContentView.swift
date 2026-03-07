@@ -3334,6 +3334,8 @@ struct ContentView: View {
             return .splitRight
         case "palette.terminalSplitDown":
             return .splitDown
+        case "palette.toggleSplitZoom":
+            return .toggleSplitZoom
         default:
             return nil
         }
@@ -3953,6 +3955,18 @@ struct ContentView: View {
         )
         contributions.append(
             CommandPaletteCommandContribution(
+                commandId: "palette.toggleSplitZoom",
+                title: constant("Toggle Pane Zoom"),
+                subtitle: constant("Terminal Layout"),
+                keywords: ["terminal", "pane", "split", "zoom", "maximize"],
+                when: { context in
+                    context.bool(CommandPaletteContextKeys.panelIsTerminal) &&
+                    context.bool(CommandPaletteContextKeys.workspaceHasSplits)
+                }
+            )
+        )
+        contributions.append(
+            CommandPaletteCommandContribution(
                 commandId: "palette.equalizeSplits",
                 title: constant("Equalize Splits"),
                 subtitle: workspaceSubtitle,
@@ -4194,6 +4208,11 @@ struct ContentView: View {
         }
         registry.register(commandId: "palette.terminalSplitBrowserDown") {
             _ = tabManager.createBrowserSplit(direction: .down)
+        }
+        registry.register(commandId: "palette.toggleSplitZoom") {
+            if !tabManager.toggleFocusedSplitZoom() {
+                NSSound.beep()
+            }
         }
         registry.register(commandId: "palette.equalizeSplits") {
             guard let workspace = tabManager.selectedWorkspace,
