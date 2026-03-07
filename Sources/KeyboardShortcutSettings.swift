@@ -20,6 +20,7 @@ enum KeyboardShortcutSettings {
         case prevSidebarTab
         case renameTab
         case renameWorkspace
+        case toggleWorkspacePin
         case closeWorkspace
         case newSurface
         case toggleTerminalCopyMode
@@ -57,6 +58,7 @@ enum KeyboardShortcutSettings {
             case .prevSidebarTab: return "Previous Workspace"
             case .renameTab: return "Rename Tab"
             case .renameWorkspace: return "Rename Workspace"
+            case .toggleWorkspacePin: return "Pin Workspace"
             case .closeWorkspace: return "Close Workspace"
             case .newSurface: return "New Surface"
             case .toggleTerminalCopyMode: return "Toggle Terminal Copy Mode"
@@ -88,6 +90,7 @@ enum KeyboardShortcutSettings {
             case .prevSidebarTab: return "shortcut.prevSidebarTab"
             case .renameTab: return "shortcut.renameTab"
             case .renameWorkspace: return "shortcut.renameWorkspace"
+            case .toggleWorkspacePin: return "shortcut.toggleWorkspacePin"
             case .closeWorkspace: return "shortcut.closeWorkspace"
             case .focusLeft: return "shortcut.focusLeft"
             case .focusRight: return "shortcut.focusRight"
@@ -132,6 +135,8 @@ enum KeyboardShortcutSettings {
                 return StoredShortcut(key: "r", command: true, shift: false, option: false, control: false)
             case .renameWorkspace:
                 return StoredShortcut(key: "r", command: true, shift: true, option: false, control: false)
+            case .toggleWorkspacePin:
+                return StoredShortcut(key: "p", command: true, shift: false, option: true, control: false)
             case .closeWorkspace:
                 return StoredShortcut(key: "w", command: true, shift: true, option: false, control: false)
             case .focusLeft:
@@ -221,6 +226,7 @@ enum KeyboardShortcutSettings {
     static func nextSidebarTabShortcut() -> StoredShortcut { shortcut(for: .nextSidebarTab) }
     static func prevSidebarTabShortcut() -> StoredShortcut { shortcut(for: .prevSidebarTab) }
     static func renameWorkspaceShortcut() -> StoredShortcut { shortcut(for: .renameWorkspace) }
+    static func toggleWorkspacePinShortcut() -> StoredShortcut { shortcut(for: .toggleWorkspacePin) }
     static func closeWorkspaceShortcut() -> StoredShortcut { shortcut(for: .closeWorkspace) }
 
     static func focusLeftShortcut() -> StoredShortcut { shortcut(for: .focusLeft) }

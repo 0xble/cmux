@@ -113,8 +113,9 @@ Everything is scriptable through the CLI and socket API — create workspaces/ta
 | ⌘ 9 | Jump to last workspace |
 | ⌃ ⌘ ] | Next workspace |
 | ⌃ ⌘ [ | Previous workspace |
-| ⌘ ⇧ W | Close workspace |
 | ⌘ ⇧ R | Rename workspace |
+| ⌥ ⌘ P | Pin or unpin workspace |
+| ⌘ ⇧ W | Close workspace |
 | ⌘ B | Toggle sidebar |
 
 ### Surfaces

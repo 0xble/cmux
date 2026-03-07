@@ -5635,6 +5635,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             )
         }
 
+        if matchShortcut(event: event, shortcut: KeyboardShortcutSettings.shortcut(for: .toggleWorkspacePin)) {
+#if DEBUG
+            dlog("shortcut.action name=toggleWorkspacePin \(debugShortcutRouteSnapshot(event: event))")
+#endif
+            return toggleWorkspacePinInActiveMainWindow(
+                preferredWindow: commandPaletteTargetWindow ?? event.window ?? NSApp.keyWindow ?? NSApp.mainWindow
+            )
+        }
+
         if normalizedFlags == [.command, .option], (chars == "t" || event.keyCode == 17) {
             if let targetWindow = event.window ?? NSApp.keyWindow ?? NSApp.mainWindow,
                targetWindow.identifier?.rawValue == "cmux.settings" {
@@ -6341,6 +6350,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             preferredWindow: targetWindow,
             source: "shortcut.renameWorkspace"
         )
+        return true
+    }
+
+    @discardableResult
+    func toggleWorkspacePinInActiveMainWindow(preferredWindow: NSWindow? = nil) -> Bool {
+        let targetWindow = preferredWindow ?? NSApp.keyWindow ?? NSApp.mainWindow
+        guard let manager = synchronizeActiveMainWindowContext(preferredWindow: targetWindow) else {
+            NSSound.beep()
+            return false
+        }
+        guard let workspace = manager.selectedWorkspace else {
+            NSSound.beep()
+            return false
+        }
+
+        manager.setPinned(workspace, pinned: !workspace.isPinned)
         return true
     }
 
