@@ -6370,9 +6370,43 @@ private struct TabItemView: View {
 
     var body: some View {
         let latestNotificationSubtitle = latestNotificationText
-        let compactBranchDirectoryRow = branchDirectoryRow
-        let branchDirectoryLines = verticalBranchDirectoryLines
+        let orderedPanelIds: [UUID]? = (sidebarShowBranchDirectory || sidebarShowPullRequest)
+            ? tab.sidebarOrderedPanelIds()
+            : nil
+        let compactGitBranchSummaryText: String? = {
+            guard sidebarShowBranchDirectory,
+                  !sidebarBranchVerticalLayout,
+                  sidebarShowGitBranch,
+                  let orderedPanelIds else {
+                return nil
+            }
+            return gitBranchSummaryText(orderedPanelIds: orderedPanelIds)
+        }()
+        let compactDirectorySummaryText: String? = {
+            guard sidebarShowBranchDirectory,
+                  !sidebarBranchVerticalLayout,
+                  let orderedPanelIds else {
+                return nil
+            }
+            return directorySummaryText(orderedPanelIds: orderedPanelIds)
+        }()
+        let compactBranchDirectoryRow = branchDirectoryRow(
+            gitSummary: compactGitBranchSummaryText,
+            directorySummary: compactDirectorySummaryText
+        )
+        let branchDirectoryLines: [VerticalBranchDirectoryLine] = {
+            guard sidebarShowBranchDirectory,
+                  sidebarBranchVerticalLayout,
+                  let orderedPanelIds else {
+                return []
+            }
+            return verticalBranchDirectoryLines(orderedPanelIds: orderedPanelIds)
+        }()
         let branchLinesContainBranch = sidebarShowGitBranch && branchDirectoryLines.contains { $0.branch != nil }
+        let pullRequestRows: [PullRequestDisplay] = {
+            guard sidebarShowPullRequest, let orderedPanelIds else { return [] }
+            return pullRequestDisplays(orderedPanelIds: orderedPanelIds)
+        }()
 
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
@@ -6549,7 +6583,7 @@ private struct TabItemView: View {
                     }
                 } else if let dirRow = compactBranchDirectoryRow {
                     HStack(spacing: 3) {
-                        if sidebarShowGitBranch && gitBranchSummaryText != nil && sidebarShowGitBranchIcon {
+                        if sidebarShowGitBranchIcon, compactGitBranchSummaryText != nil {
                             Image(systemName: "arrow.triangle.branch")
                                 .font(.system(size: 9))
                                 .foregroundColor(activeSecondaryColor(0.6))
@@ -6564,9 +6598,9 @@ private struct TabItemView: View {
             }
 
             // Pull request rows
-            if sidebarShowPullRequest, !pullRequestDisplays.isEmpty {
+            if sidebarShowPullRequest, !pullRequestRows.isEmpty {
                 VStack(alignment: .leading, spacing: 1) {
-                    ForEach(pullRequestDisplays) { pullRequest in
+                    ForEach(pullRequestRows) { pullRequest in
                         Button(action: {
                             openPullRequestLink(pullRequest.url)
                         }) {
@@ -7075,37 +7109,34 @@ private struct TabItemView: View {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    private var branchDirectoryRow: String? {
+    private func branchDirectoryRow(
+        gitSummary: String?,
+        directorySummary: String?
+    ) -> String? {
         var parts: [String] = []
 
-        // Git branch (if enabled and available)
-        if sidebarShowGitBranch, let gitSummary = gitBranchSummaryText {
+        if let gitSummary {
             parts.append(gitSummary)
         }
 
-        // Directory summary
-        if let dirs = directorySummaryText {
-            parts.append(dirs)
+        if let directorySummary {
+            parts.append(directorySummary)
         }
 
         let result = parts.joined(separator: " · ")
         return result.isEmpty ? nil : result
     }
 
-    private var gitBranchSummaryText: String? {
-        let lines = gitBranchSummaryLines
+    private func gitBranchSummaryText(orderedPanelIds: [UUID]) -> String? {
+        let lines = gitBranchSummaryLines(orderedPanelIds: orderedPanelIds)
         guard !lines.isEmpty else { return nil }
         return lines.joined(separator: " | ")
     }
 
-    private var gitBranchSummaryLines: [String] {
-        tab.sidebarGitBranchesInDisplayOrder().map { branch in
+    private func gitBranchSummaryLines(orderedPanelIds: [UUID]) -> [String] {
+        tab.sidebarGitBranchesInDisplayOrder(orderedPanelIds: orderedPanelIds).map { branch in
             "\(branch.branch)\(branch.isDirty ? "*" : "")"
         }
-    }
-
-    private var verticalBranchDirectoryEntries: [SidebarBranchOrdering.BranchDirectoryEntry] {
-        tab.sidebarBranchDirectoryEntriesInDisplayOrder()
     }
 
     private struct VerticalBranchDirectoryLine {
@@ -7113,9 +7144,10 @@ private struct TabItemView: View {
         let directory: String?
     }
 
-    private var verticalBranchDirectoryLines: [VerticalBranchDirectoryLine] {
+    private func verticalBranchDirectoryLines(orderedPanelIds: [UUID]) -> [VerticalBranchDirectoryLine] {
+        let entries = tab.sidebarBranchDirectoryEntriesInDisplayOrder(orderedPanelIds: orderedPanelIds)
         let home = SidebarPathFormatter.homeDirectoryPath
-        return verticalBranchDirectoryEntries.compactMap { entry in
+        return entries.compactMap { entry in
             let branchText: String? = {
                 guard sidebarShowGitBranch, let branch = entry.branch else { return nil }
                 return "\(branch)\(entry.isDirty ? "*" : "")"
@@ -7140,12 +7172,12 @@ private struct TabItemView: View {
         }
     }
 
-    private var directorySummaryText: String? {
+    private func directorySummaryText(orderedPanelIds: [UUID]) -> String? {
         guard !tab.panels.isEmpty else { return nil }
         let home = SidebarPathFormatter.homeDirectoryPath
         var seen: Set<String> = []
         var entries: [String] = []
-        for panelId in tab.sidebarOrderedPanelIds() {
+        for panelId in orderedPanelIds {
             let directory = tab.panelDirectories[panelId] ?? tab.currentDirectory
             let shortened = SidebarPathFormatter.shortenedPath(directory, homeDirectoryPath: home)
             guard !shortened.isEmpty else { continue }
@@ -7164,8 +7196,8 @@ private struct TabItemView: View {
         let status: SidebarPullRequestStatus
     }
 
-    private var pullRequestDisplays: [PullRequestDisplay] {
-        tab.sidebarPullRequestsInDisplayOrder().map { pullRequest in
+    private func pullRequestDisplays(orderedPanelIds: [UUID]) -> [PullRequestDisplay] {
+        tab.sidebarPullRequestsInDisplayOrder(orderedPanelIds: orderedPanelIds).map { pullRequest in
             PullRequestDisplay(
                 id: "\(pullRequest.label.lowercased())#\(pullRequest.number)|\(pullRequest.url.absoluteString)",
                 number: pullRequest.number,
