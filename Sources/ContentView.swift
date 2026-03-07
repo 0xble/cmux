@@ -1370,6 +1370,7 @@ struct ContentView: View {
         static let workspaceHasCustomName = "workspace.hasCustomName"
         static let workspaceShouldPin = "workspace.shouldPin"
         static let workspaceHasPullRequests = "workspace.hasPullRequests"
+        static let workspaceHasSplits = "workspace.hasSplits"
 
         static let hasFocusedPanel = "panel.hasFocus"
         static let panelName = "panel.name"
@@ -3345,6 +3346,10 @@ struct ContentView: View {
                 CommandPaletteContextKeys.workspaceHasPullRequests,
                 !workspace.sidebarPullRequestsInDisplayOrder().isEmpty
             )
+            snapshot.setBool(
+                CommandPaletteContextKeys.workspaceHasSplits,
+                workspace.bonsplitController.allPaneIds.count > 1
+            )
         }
 
         if let panelContext = focusedPanelContext {
@@ -3902,6 +3907,15 @@ struct ContentView: View {
                 when: { $0.bool(CommandPaletteContextKeys.panelIsTerminal) }
             )
         )
+        contributions.append(
+            CommandPaletteCommandContribution(
+                commandId: "palette.equalizeSplits",
+                title: constant("Equalize Splits"),
+                subtitle: workspaceSubtitle,
+                keywords: ["split", "equalize", "balance", "divider", "layout"],
+                when: { $0.bool(CommandPaletteContextKeys.workspaceHasSplits) }
+            )
+        )
 
         return contributions
     }
@@ -4136,6 +4150,13 @@ struct ContentView: View {
         }
         registry.register(commandId: "palette.terminalSplitBrowserDown") {
             _ = tabManager.createBrowserSplit(direction: .down)
+        }
+        registry.register(commandId: "palette.equalizeSplits") {
+            guard let workspace = tabManager.selectedWorkspace,
+                  tabManager.equalizeSplits(tabId: workspace.id) else {
+                NSSound.beep()
+                return
+            }
         }
     }
 
