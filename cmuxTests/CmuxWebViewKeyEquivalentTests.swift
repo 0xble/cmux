@@ -2644,6 +2644,17 @@ final class CommandPaletteOpenShortcutConsumptionTests: XCTestCase {
             )
         )
     }
+
+    func testConsumesEscapeWhenPaletteIsVisible() {
+        XCTAssertTrue(
+            shouldConsumeShortcutWhileCommandPaletteVisible(
+                isCommandPaletteVisible: true,
+                normalizedFlags: [],
+                chars: "",
+                keyCode: 53
+            )
+        )
+    }
 }
 
 final class CommandPaletteRestoreFocusStateMachineTests: XCTestCase {
