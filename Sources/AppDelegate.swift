@@ -725,30 +725,53 @@ struct CommandPaletteDebugSnapshot {
 func browserZoomShortcutAction(
     flags: NSEvent.ModifierFlags,
     chars: String,
-    keyCode: UInt16
+    keyCode: UInt16,
+    literalChars: String? = nil
 ) -> BrowserZoomShortcutAction? {
     let normalizedFlags = flags
         .intersection(.deviceIndependentFlagsMask)
         .subtracting([.numericPad, .function])
-    let key = chars.lowercased()
     let hasCommand = normalizedFlags.contains(.command)
     let hasOnlyCommandAndOptionalShift = hasCommand && normalizedFlags.isDisjoint(with: [.control, .option])
 
     guard hasOnlyCommandAndOptionalShift else { return nil }
+    let keys = browserZoomShortcutKeyCandidates(
+        chars: chars,
+        literalChars: literalChars,
+        keyCode: keyCode
+    )
 
-    if key == "=" || key == "+" || keyCode == 24 || keyCode == 69 { // kVK_ANSI_Equal / kVK_ANSI_KeypadPlus
+    if keys.contains("=") || keys.contains("+") || keyCode == 24 || keyCode == 69 { // kVK_ANSI_Equal / kVK_ANSI_KeypadPlus
         return .zoomIn
     }
 
-    if key == "-" || key == "_" || keyCode == 27 || keyCode == 78 { // kVK_ANSI_Minus / kVK_ANSI_KeypadMinus
+    if keys.contains("-") || keys.contains("_") || keyCode == 27 || keyCode == 78 { // kVK_ANSI_Minus / kVK_ANSI_KeypadMinus
         return .zoomOut
     }
 
-    if key == "0" || keyCode == 29 || keyCode == 82 { // kVK_ANSI_0 / kVK_ANSI_Keypad0
+    if keys.contains("0") || keyCode == 29 || keyCode == 82 { // kVK_ANSI_0 / kVK_ANSI_Keypad0
         return .reset
     }
 
     return nil
+}
+
+func browserZoomShortcutKeyCandidates(
+    chars: String,
+    literalChars: String?,
+    keyCode: UInt16
+) -> Set<String> {
+    var keys: Set<String> = [chars.lowercased()]
+
+    if let literalChars, !literalChars.isEmpty {
+        keys.insert(literalChars.lowercased())
+    }
+
+    if let layoutChar = KeyboardLayout.character(forKeyCode: keyCode), !layoutChar.isEmpty {
+        keys.insert(layoutChar)
+    }
+
+    return keys
 }
 
 func shouldSuppressSplitShortcutForTransientTerminalFocusInputs(
@@ -766,10 +789,16 @@ func shouldRouteTerminalFontZoomShortcutToGhostty(
     firstResponderIsGhostty: Bool,
     flags: NSEvent.ModifierFlags,
     chars: String,
-    keyCode: UInt16
+    keyCode: UInt16,
+    literalChars: String? = nil
 ) -> Bool {
     guard firstResponderIsGhostty else { return false }
-    return browserZoomShortcutAction(flags: flags, chars: chars, keyCode: keyCode) != nil
+    return browserZoomShortcutAction(
+        flags: flags,
+        chars: chars,
+        keyCode: keyCode,
+        literalChars: literalChars
+    ) != nil
 }
 
 func cmuxOwningGhosttyView(for responder: NSResponder?) -> GhosttyNSView? {
@@ -824,15 +853,20 @@ private func cmuxOwningGhosttyView(for view: NSView) -> GhosttyNSView? {
 func browserZoomShortcutTraceCandidate(
     flags: NSEvent.ModifierFlags,
     chars: String,
-    keyCode: UInt16
+    keyCode: UInt16,
+    literalChars: String? = nil
 ) -> Bool {
     let normalizedFlags = flags
         .intersection(.deviceIndependentFlagsMask)
         .subtracting([.numericPad, .function])
     guard normalizedFlags.contains(.command) else { return false }
 
-    let key = chars.lowercased()
-    if key == "=" || key == "+" || key == "-" || key == "_" || key == "0" {
+    let keys = browserZoomShortcutKeyCandidates(
+        chars: chars,
+        literalChars: literalChars,
+        keyCode: keyCode
+    )
+    if keys.contains("=") || keys.contains("+") || keys.contains("-") || keys.contains("_") || keys.contains("0") {
         return true
     }
     switch keyCode {
@@ -5487,7 +5521,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         #if DEBUG
         logBrowserZoomShortcutTrace(stage: "probe", event: event, flags: flags, chars: chars)
         #endif
-        let zoomAction = browserZoomShortcutAction(flags: flags, chars: chars, keyCode: event.keyCode)
+        let zoomAction = browserZoomShortcutAction(
+            flags: flags,
+            chars: chars,
+            keyCode: event.keyCode,
+            literalChars: event.characters
+        )
         #if DEBUG
         logBrowserZoomShortcutTrace(stage: "match", event: event, flags: flags, chars: chars, action: zoomAction)
         #endif
@@ -5581,7 +5620,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         action: BrowserZoomShortcutAction? = nil,
         handled: Bool? = nil
     ) {
-        guard browserZoomShortcutTraceCandidate(flags: flags, chars: chars, keyCode: event.keyCode) else {
+        guard browserZoomShortcutTraceCandidate(
+            flags: flags,
+            chars: chars,
+            keyCode: event.keyCode,
+            literalChars: event.characters
+        ) else {
             return
         }
 
@@ -7434,7 +7478,8 @@ private extension NSWindow {
                 firstResponderIsGhostty: true,
                 flags: event.modifierFlags,
                 chars: event.charactersIgnoringModifiers ?? "",
-                keyCode: event.keyCode
+                keyCode: event.keyCode,
+                literalChars: event.characters
             ) {
                 ghosttyView.keyDown(with: event)
 #if DEBUG
@@ -7487,7 +7532,8 @@ private extension NSWindow {
             if browserZoomShortcutTraceCandidate(
                 flags: event.modifierFlags,
                 chars: event.charactersIgnoringModifiers ?? "",
-                keyCode: event.keyCode
+                keyCode: event.keyCode,
+                literalChars: event.characters
             ) {
                 dlog(
                     "zoom.shortcut stage=window.mainMenuBypass event=\(Self.keyDescription(event)) " +
