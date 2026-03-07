@@ -10,6 +10,10 @@ Run the setup script to initialize submodules and build GhosttyKit:
 
 ## Local dev
 
+For this fork, develop and branch off `stable` by default, not `main`.
+`stable` is the long-lived fork branch on `origin/stable` and is the default base for local feature work in this repo.
+`main` is not the default base here, it has diverged separately and should only be used when a task explicitly calls for `main` or upstream-main work.
+
 After making code changes, always run the reload script with a tag to launch the Debug app:
 
 ```bash
@@ -203,6 +207,7 @@ git commit -m "Update ghostty submodule"
 ## Release
 
 Use the `/release` command to prepare a new release. This will:
+
 1. Determine the new version (bumps minor by default)
 2. Gather commits since the last tag and update the changelog
 3. Update `CHANGELOG.md` (the docs changelog page at `web/app/docs/changelog/page.tsx` reads from it)
@@ -229,6 +234,7 @@ gh run watch --repo manaflow-ai/cmux
 ```
 
 Notes:
+
 - Requires GitHub secrets: `APPLE_CERTIFICATE_BASE64`, `APPLE_CERTIFICATE_PASSWORD`,
   `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`.
 - The release asset is `cmux-macos.dmg` attached to the tag.
