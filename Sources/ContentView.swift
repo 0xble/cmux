@@ -5784,7 +5784,7 @@ private struct SidebarExternalDropOverlay: View {
                     .contentShape(Rectangle())
                     .allowsHitTesting(true)
                     .onDrop(
-                        of: [SidebarTabDragPayload.typeIdentifier],
+                        of: SidebarTabDragPayload.dropContentTypes,
                         delegate: SidebarExternalDropDelegate(draggedTabId: draggedTabId)
                     )
             } else {
@@ -6119,7 +6119,7 @@ private struct SidebarEmptyArea: View {
                 }
                 selection = .tabs
             }
-            .onDrop(of: [SidebarTabDragPayload.typeIdentifier], delegate: SidebarTabDropDelegate(
+            .onDrop(of: SidebarTabDragPayload.dropContentTypes, delegate: SidebarTabDropDelegate(
                 targetTabId: nil,
                 tabManager: tabManager,
                 draggedTabId: $draggedTabId,
@@ -6167,6 +6167,59 @@ enum SidebarPathFormatter {
         }
         return trimmed
     }
+}
+
+enum SidebarWorkspaceShortcutHintMetrics {
+    private static let measurementFont = NSFont.systemFont(ofSize: 10, weight: .semibold)
+    private static let minimumSlotWidth: CGFloat = 28
+    private static let horizontalPadding: CGFloat = 12
+    private static let lock = NSLock()
+    private static var cachedHintWidths: [String: CGFloat] = [:]
+    #if DEBUG
+    private static var measurementCount = 0
+    #endif
+
+    static func slotWidth(label: String?, debugXOffset: Double) -> CGFloat {
+        guard let label else { return minimumSlotWidth }
+        let positiveDebugInset = max(0, CGFloat(ShortcutHintDebugSettings.clamped(debugXOffset))) + 2
+        return max(minimumSlotWidth, hintWidth(for: label) + positiveDebugInset)
+    }
+
+    static func hintWidth(for label: String) -> CGFloat {
+        lock.lock()
+        if let cached = cachedHintWidths[label] {
+            lock.unlock()
+            return cached
+        }
+        lock.unlock()
+
+        let textWidth = (label as NSString).size(withAttributes: [.font: measurementFont]).width
+        let measuredWidth = ceil(textWidth) + horizontalPadding
+
+        lock.lock()
+        cachedHintWidths[label] = measuredWidth
+        #if DEBUG
+        measurementCount += 1
+        #endif
+        lock.unlock()
+        return measuredWidth
+    }
+
+    #if DEBUG
+    static func resetCacheForTesting() {
+        lock.lock()
+        cachedHintWidths.removeAll()
+        measurementCount = 0
+        lock.unlock()
+    }
+
+    static func measurementCountForTesting() -> Int {
+        lock.lock()
+        let count = measurementCount
+        lock.unlock()
+        return count
+    }
+    #endif
 }
 
 private struct TabItemView: View {
@@ -6295,15 +6348,10 @@ private struct TabItemView: View {
     }
 
     private var workspaceHintSlotWidth: CGFloat {
-        guard let label = workspaceShortcutLabel else { return 28 }
-        let positiveDebugInset = max(0, CGFloat(ShortcutHintDebugSettings.clamped(sidebarShortcutHintXOffset))) + 2
-        return max(28, workspaceHintWidth(for: label) + positiveDebugInset)
-    }
-
-    private func workspaceHintWidth(for label: String) -> CGFloat {
-        let font = NSFont.systemFont(ofSize: 10, weight: .semibold)
-        let textWidth = (label as NSString).size(withAttributes: [.font: font]).width
-        return ceil(textWidth) + 12
+        SidebarWorkspaceShortcutHintMetrics.slotWidth(
+            label: workspaceShortcutLabel,
+            debugXOffset: sidebarShortcutHintXOffset
+        )
     }
 
     var body: some View {
@@ -6601,7 +6649,7 @@ private struct TabItemView: View {
             dropIndicator = nil
             return SidebarTabDragPayload.provider(for: tab.id)
         }
-        .onDrop(of: [SidebarTabDragPayload.typeIdentifier], delegate: SidebarTabDropDelegate(
+        .onDrop(of: SidebarTabDragPayload.dropContentTypes, delegate: SidebarTabDropDelegate(
             targetTabId: tab.id,
             tabManager: tabManager,
             draggedTabId: $draggedTabId,
@@ -6611,7 +6659,7 @@ private struct TabItemView: View {
             dragAutoScrollController: dragAutoScrollController,
             dropIndicator: $dropIndicator
         ))
-        .onDrop(of: [BonsplitTabDragPayload.typeIdentifier], delegate: SidebarBonsplitTabDropDelegate(
+        .onDrop(of: BonsplitTabDragPayload.dropContentTypes, delegate: SidebarBonsplitTabDropDelegate(
             targetWorkspaceId: tab.id,
             tabManager: tabManager,
             selectedTabIds: $selectedTabIds,
@@ -7845,6 +7893,8 @@ private final class SidebarDragAutoScrollController: ObservableObject {
 
 private enum SidebarTabDragPayload {
     static let typeIdentifier = "com.cmux.sidebar-tab-reorder"
+    static let dropContentType = UTType(exportedAs: typeIdentifier)
+    static let dropContentTypes: [UTType] = [dropContentType]
     private static let prefix = "cmux.sidebar-tab."
 
     static func provider(for tabId: UUID) -> NSItemProvider {
@@ -7860,6 +7910,8 @@ private enum SidebarTabDragPayload {
 
 private enum BonsplitTabDragPayload {
     static let typeIdentifier = "com.splittabbar.tabtransfer"
+    static let dropContentType = UTType(exportedAs: typeIdentifier)
+    static let dropContentTypes: [UTType] = [dropContentType]
     private static let currentProcessId = Int32(ProcessInfo.processInfo.processIdentifier)
 
     struct Transfer: Decodable {
