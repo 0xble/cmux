@@ -10,8 +10,8 @@ Run the setup script to initialize submodules and build GhosttyKit:
 
 ## Local dev
 
-For this fork, develop and branch off `stable` by default, not `main`.
-`stable` is the long-lived fork branch on `origin/stable` and is the default base for local feature work in this repo.
+For this fork, develop and branch off `release` by default, not `main`.
+`release` is the long-lived fork branch on `origin/release` and is the default base for local feature work in this repo.
 `main` is not the default base here, it has diverged separately and should only be used when a task explicitly calls for `main` or upstream-main work.
 
 After making code changes, always run the reload script with a tag to launch the Debug app:
