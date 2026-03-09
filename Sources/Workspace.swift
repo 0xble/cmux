@@ -591,7 +591,7 @@ extension Workspace {
     }
 }
 
-enum SidebarLogLevel: String {
+enum SidebarLogLevel: String, Codable {
     case info
     case progress
     case success
@@ -1579,6 +1579,80 @@ final class Workspace: Identifiable, ObservableObject {
         }
 
         return didMutate
+    }
+
+    @discardableResult
+    func upsertSidebarStatusEntry(
+        key: String,
+        value: String,
+        icon: String?,
+        color: String?,
+        url: URL?,
+        priority: Int,
+        format: SidebarMetadataFormat
+    ) -> Bool {
+        guard TerminalController.shouldReplaceStatusEntry(
+            current: statusEntries[key],
+            key: key,
+            value: value,
+            icon: icon,
+            color: color,
+            url: url,
+            priority: priority,
+            format: format
+        ) else {
+            return false
+        }
+
+        statusEntries[key] = SidebarStatusEntry(
+            key: key,
+            value: value,
+            icon: icon,
+            color: color,
+            url: url,
+            priority: priority,
+            format: format,
+            timestamp: Date()
+        )
+        return true
+    }
+
+    @discardableResult
+    func removeSidebarStatusEntry(key: String) -> Bool {
+        statusEntries.removeValue(forKey: key) != nil
+    }
+
+    @discardableResult
+    func setSidebarProgress(value: Double, label: String?) -> Bool {
+        let clamped = min(1.0, max(0.0, value))
+        guard TerminalController.shouldReplaceProgress(current: progress, value: clamped, label: label) else {
+            return false
+        }
+        progress = SidebarProgressState(value: clamped, label: label)
+        return true
+    }
+
+    @discardableResult
+    func clearSidebarProgress() -> Bool {
+        guard progress != nil else { return false }
+        progress = nil
+        return true
+    }
+
+    func appendSidebarLog(message: String, level: SidebarLogLevel, source: String?) {
+        logEntries.append(SidebarLogEntry(message: message, level: level, source: source, timestamp: Date()))
+        let configuredLimit = UserDefaults.standard.object(forKey: "sidebarMaxLogEntries") as? Int ?? 50
+        let limit = max(1, min(500, configuredLimit))
+        if logEntries.count > limit {
+            logEntries.removeFirst(logEntries.count - limit)
+        }
+    }
+
+    @discardableResult
+    func clearSidebarLogEntries() -> Bool {
+        guard !logEntries.isEmpty else { return false }
+        logEntries.removeAll()
+        return true
     }
 
     func pruneSurfaceMetadata(validSurfaceIds: Set<UUID>) {
@@ -3124,11 +3198,11 @@ final class Workspace: Identifiable, ObservableObject {
                 needsFollowUpPass = true
             }
 
-            hostedView.reconcileGeometryNow()
+            _ = hostedView.reconcileGeometryNow()
             // Re-check surface after reconcileGeometryNow() which can trigger AppKit
             // layout and view lifecycle changes that free surfaces (#432).
             if terminalPanel.surface.surface != nil {
-                terminalPanel.surface.forceRefresh()
+                terminalPanel.surface.forceRefresh(reason: "workspace.geometryReconcile")
             }
             if terminalPanel.surface.surface == nil, isAttached && hasUsableBounds {
                 terminalPanel.surface.requestBackgroundSurfaceStartIfNeeded()
@@ -3184,9 +3258,9 @@ final class Workspace: Identifiable, ObservableObject {
         let runRefreshPass: (TimeInterval) -> Void = { [weak self] delay in
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
                 guard let self, let panel = self.terminalPanel(for: panelId) else { return }
-                panel.hostedView.reconcileGeometryNow()
+                _ = panel.hostedView.reconcileGeometryNow()
                 if panel.surface.surface != nil {
-                    panel.surface.forceRefresh()
+                    panel.surface.forceRefresh(reason: "workspace.movedTerminalRefresh")
                 }
                 if panel.surface.surface == nil {
                     panel.surface.requestBackgroundSurfaceStartIfNeeded()
@@ -3196,6 +3270,23 @@ final class Workspace: Identifiable, ObservableObject {
 
         // Run once immediately and once on the next turn so rapid split close/reparent
         // sequences still get a post-layout redraw.
+        runRefreshPass(0)
+        runRefreshPass(0.03)
+    }
+
+    private func scheduleMovedBrowserRefresh(panelId: UUID) {
+        guard browserPanel(for: panelId) != nil else { return }
+
+        let runRefreshPass: (TimeInterval) -> Void = { [weak self] delay in
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                guard let self, let browser = self.browserPanel(for: panelId) else { return }
+                BrowserWindowPortalRegistry.refresh(
+                    webView: browser.webView,
+                    reason: "workspace.movedBrowserRefresh"
+                )
+            }
+        }
+
         runRefreshPass(0)
         runRefreshPass(0.03)
     }
@@ -3837,6 +3928,7 @@ extension Workspace: BonsplitDelegate {
 #endif
         if let movedPanelId = panelIdFromSurfaceId(tab.id) {
             scheduleMovedTerminalRefresh(panelId: movedPanelId)
+            scheduleMovedBrowserRefresh(panelId: movedPanelId)
         }
 #if DEBUG
         let selectedAfter = controller.selectedTab(inPane: destination)

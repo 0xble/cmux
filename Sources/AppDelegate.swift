@@ -3111,7 +3111,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         var refreshedCount = 0
         forEachTerminalPanel { terminalPanel in
             terminalPanel.hostedView.reconcileGeometryNow()
-            terminalPanel.surface.forceRefresh()
+            terminalPanel.surface.forceRefresh(reason: "appDelegate.refreshAfterGhosttyConfigReload")
             refreshedCount += 1
         }
 #if DEBUG
@@ -3442,8 +3442,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     private func contextForMainWindow(_ window: NSWindow?) -> MainWindowContext? {
-        guard let window, isMainTerminalWindow(window) else { return nil }
-        return mainWindowContexts[ObjectIdentifier(window)]
+        guard let window else { return nil }
+        return contextForMainTerminalWindow(window)
     }
 
 #if DEBUG
@@ -5954,6 +5954,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         return false
     }
 
+    @discardableResult
+    func handleCommandShortcutFallback(event: NSEvent) -> Bool {
+        handleCustomShortcut(event: event)
+    }
+
     private func shouldSuppressSplitShortcutForTransientTerminalFocusState(direction: SplitDirection) -> Bool {
         guard let tabManager,
               let workspace = tabManager.selectedWorkspace,
@@ -6353,19 +6358,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         return true
     }
 
+    private func preferredMainWindowContextForWindowScopedAction(
+        preferredWindow: NSWindow? = nil
+    ) -> MainWindowContext? {
+        if let preferredWindow,
+           let context = contextForMainTerminalWindow(preferredWindow) {
+            return context
+        }
+
+        if let keyWindow = NSApp.keyWindow,
+           let context = contextForMainTerminalWindow(keyWindow) {
+            return context
+        }
+
+        if let mainWindow = NSApp.mainWindow,
+           let context = contextForMainTerminalWindow(mainWindow) {
+            return context
+        }
+
+        for window in NSApp.orderedWindows where isMainTerminalWindow(window) {
+            if let context = contextForMainTerminalWindow(window) {
+                return context
+            }
+        }
+
+        if let activeManager = tabManager,
+           let context = mainWindowContexts.values.first(where: { $0.tabManager === activeManager }) {
+            return context
+        }
+
+        return mainWindowContexts.values.first
+    }
+
     @discardableResult
     func toggleWorkspacePinInActiveMainWindow(preferredWindow: NSWindow? = nil) -> Bool {
-        let targetWindow = preferredWindow ?? NSApp.keyWindow ?? NSApp.mainWindow
-        guard let manager = synchronizeActiveMainWindowContext(preferredWindow: targetWindow) else {
-            NSSound.beep()
-            return false
-        }
-        guard let workspace = manager.selectedWorkspace else {
+        guard let context = preferredMainWindowContextForWindowScopedAction(
+            preferredWindow: preferredWindow
+        ) else {
             NSSound.beep()
             return false
         }
 
-        manager.setPinned(workspace, pinned: !workspace.isPinned)
+        if let window = context.window ?? windowForMainWindowId(context.windowId) {
+            setActiveMainWindow(window)
+        }
+
+        guard let workspace = context.tabManager.selectedWorkspace else {
+            NSSound.beep()
+            return false
+        }
+
+        context.tabManager.setPinned(workspace, pinned: !workspace.isPinned)
         return true
     }
 
@@ -7972,7 +8015,12 @@ private extension NSWindow {
             }
 #endif
             if !consumedByMenu {
-                // Fall through to the original performKeyEquivalent path below.
+                if AppDelegate.shared?.handleCommandShortcutFallback(event: event) == true {
+#if DEBUG
+                    dlog("  → consumed by AppDelegate command shortcut fallback")
+#endif
+                    return true
+                }
             } else {
 #if DEBUG
                 dlog("  → consumed by mainMenu (bypassed SwiftUI)")

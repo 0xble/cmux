@@ -20,6 +20,68 @@ private func browserPortalDebugFrame(_ rect: NSRect) -> String {
 }
 #endif
 
+private extension NSObject {
+    @discardableResult
+    func browserPortalCallVoidIfAvailable(_ rawSelector: String) -> Bool {
+        let selector = NSSelectorFromString(rawSelector)
+        guard responds(to: selector) else { return false }
+        typealias Fn = @convention(c) (AnyObject, Selector) -> Void
+        let fn = unsafeBitCast(method(for: selector), to: Fn.self)
+        fn(self, selector)
+        return true
+    }
+}
+
+private extension WKWebView {
+    func browserPortalNotifyHidden(reason: String) {
+        let firedSelectors = ["viewDidHide", "_exitInWindow"].filter {
+            browserPortalCallVoidIfAvailable($0)
+        }
+#if DEBUG
+        if !firedSelectors.isEmpty {
+            dlog(
+                "browser.portal.webview.hidden web=\(browserPortalDebugToken(self)) " +
+                "reason=\(reason) selectors=\(firedSelectors.joined(separator: ","))"
+            )
+        }
+#endif
+    }
+
+    func browserPortalReattachRenderingState(reason: String) {
+        guard window != nil else { return }
+
+        let firedSelectors = [
+            "viewDidUnhide",
+            "_enterInWindow",
+            "_endDeferringViewInWindowChangesSync",
+        ].filter {
+            browserPortalCallVoidIfAvailable($0)
+        }
+
+        if let scrollView = enclosingScrollView {
+            scrollView.needsLayout = true
+            scrollView.needsDisplay = true
+            scrollView.setNeedsDisplay(scrollView.bounds)
+            scrollView.contentView.needsLayout = true
+            scrollView.contentView.needsDisplay = true
+        }
+
+        needsLayout = true
+        needsDisplay = true
+        setNeedsDisplay(bounds)
+
+#if DEBUG
+        if !firedSelectors.isEmpty {
+            dlog(
+                "browser.portal.webview.reattach web=\(browserPortalDebugToken(self)) " +
+                "reason=\(reason) selectors=\(firedSelectors.joined(separator: ",")) " +
+                "frame=\(browserPortalDebugFrame(frame))"
+            )
+        }
+#endif
+    }
+}
+
 final class WindowBrowserHostView: NSView {
     private struct DividerRegion {
         let rectInWindow: NSRect
@@ -571,6 +633,78 @@ final class WindowBrowserPortal: NSObject {
         return created
     }
 
+    private func runHostedWebViewRefreshPass(
+        _ webView: WKWebView,
+        in containerView: WindowBrowserSlotView,
+        reason: String,
+        phase: String
+    ) {
+        guard !containerView.isHidden else { return }
+
+        containerView.needsLayout = true
+        containerView.needsDisplay = true
+        containerView.setNeedsDisplay(containerView.bounds)
+
+        if let scrollView = webView.enclosingScrollView {
+            scrollView.needsLayout = true
+            scrollView.needsDisplay = true
+            scrollView.setNeedsDisplay(scrollView.bounds)
+            scrollView.contentView.needsLayout = true
+            scrollView.contentView.needsDisplay = true
+        }
+
+        webView.needsLayout = true
+        webView.needsDisplay = true
+        webView.setNeedsDisplay(webView.bounds)
+
+        containerView.layoutSubtreeIfNeeded()
+        if let scrollView = webView.enclosingScrollView {
+            scrollView.layoutSubtreeIfNeeded()
+            scrollView.contentView.layoutSubtreeIfNeeded()
+            scrollView.displayIfNeeded()
+        }
+        webView.layoutSubtreeIfNeeded()
+        webView.browserPortalReattachRenderingState(reason: "\(reason):\(phase)")
+        containerView.displayIfNeeded()
+        webView.displayIfNeeded()
+        (webView.window ?? hostView.window)?.displayIfNeeded()
+#if DEBUG
+        dlog(
+            "browser.portal.refresh web=\(browserPortalDebugToken(webView)) " +
+            "container=\(browserPortalDebugToken(containerView)) reason=\(reason) " +
+            "phase=\(phase) frame=\(browserPortalDebugFrame(containerView.frame))"
+        )
+#endif
+    }
+
+    private func refreshHostedWebViewPresentation(
+        _ webView: WKWebView,
+        in containerView: WindowBrowserSlotView,
+        reason: String
+    ) {
+        guard !containerView.isHidden else { return }
+
+        runHostedWebViewRefreshPass(webView, in: containerView, reason: reason, phase: "immediate")
+        DispatchQueue.main.async { [weak self, weak webView, weak containerView] in
+            guard let self, let webView, let containerView else { return }
+            self.runHostedWebViewRefreshPass(
+                webView,
+                in: containerView,
+                reason: reason,
+                phase: "async"
+            )
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) { [weak self, weak webView, weak containerView] in
+            guard let self, let webView, let containerView else { return }
+            self.runHostedWebViewRefreshPass(
+                webView,
+                in: containerView,
+                reason: reason,
+                phase: "delayed"
+            )
+        }
+    }
+
     private func moveWebKitRelatedSubviewsIfNeeded(
         from sourceSuperview: NSView,
         to containerView: WindowBrowserSlotView,
@@ -627,6 +761,7 @@ final class WindowBrowserPortal: NSObject {
             "hadContainerSuperview=\(hadContainerSuperview) hadWebSuperview=\(hadWebSuperview)"
         )
 #endif
+        entry.webView?.browserPortalNotifyHidden(reason: "detach")
         entry.webView?.removeFromSuperview()
         entry.containerView?.removeFromSuperview()
     }
@@ -636,9 +771,18 @@ final class WindowBrowserPortal: NSObject {
     /// do not keep an old anchor visible.
     func updateEntryVisibility(forWebViewId webViewId: ObjectIdentifier, visibleInUI: Bool, zPriority: Int) {
         guard var entry = entriesByWebViewId[webViewId] else { return }
+        guard entry.visibleInUI != visibleInUI || entry.zPriority != zPriority else { return }
         entry.visibleInUI = visibleInUI
         entry.zPriority = zPriority
         entriesByWebViewId[webViewId] = entry
+    }
+
+    func isWebViewBoundToAnchor(withId webViewId: ObjectIdentifier, anchorView: NSView) -> Bool {
+        guard let entry = entriesByWebViewId[webViewId],
+              let boundAnchor = entry.anchorView else {
+            return false
+        }
+        return boundAnchor === anchorView
     }
 
     func bind(webView: WKWebView, to anchorView: NSView, visibleInUI: Bool, zPriority: Int = 0) {
@@ -789,9 +933,13 @@ final class WindowBrowserPortal: NSObject {
         }
     }
 
-    private func synchronizeWebView(withId webViewId: ObjectIdentifier, source: String) {
+    private func synchronizeWebView(
+        withId webViewId: ObjectIdentifier,
+        source: String,
+        forcePresentationRefresh: Bool = false
+    ) {
         guard ensureInstalled() else { return }
-        guard let entry = entriesByWebViewId[webViewId] else { return }
+        guard var entry = entriesByWebViewId[webViewId] else { return }
         guard let webView = entry.webView else {
             entriesByWebViewId.removeValue(forKey: webViewId)
             return
@@ -816,6 +964,25 @@ final class WindowBrowserPortal: NSObject {
             return
         }
         guard anchorView.window === window else {
+            let isOffWindowReparent =
+                entry.visibleInUI &&
+                anchorView.window == nil &&
+                anchorView.superview != nil
+            if isOffWindowReparent {
+#if DEBUG
+                if !containerView.isHidden {
+                    dlog(
+                        "browser.portal.hidden.deferKeep web=\(browserPortalDebugToken(webView)) " +
+                        "reason=anchorWindowMismatch.offWindow frame=\(browserPortalDebugFrame(containerView.frame))"
+                    )
+                }
+#endif
+                // During split drag/reparent churn the host view can go briefly off-window before
+                // rebinding into the same window. Keep the existing portal slot visible and queue a
+                // full sync so the browser does not flash hidden or lose its attachment mid-drag.
+                scheduleDeferredFullSynchronizeAll()
+                return
+            }
 #if DEBUG
             if !containerView.isHidden {
                 dlog(
@@ -1019,6 +1186,33 @@ final class WindowBrowserPortal: NSObject {
             "inspectorSubviews=\(inspectorSubviews)"
         )
 #endif
+        if forcePresentationRefresh, !containerView.isHidden {
+            refreshHostedWebViewPresentation(
+                webView,
+                in: containerView,
+                reason: source
+            )
+        }
+    }
+
+    func forceRefreshWebView(withId webViewId: ObjectIdentifier, reason: String) {
+        guard ensureInstalled() else { return }
+        synchronizeWebView(
+            withId: webViewId,
+            source: "forceRefresh",
+            forcePresentationRefresh: true
+        )
+        guard let entry = entriesByWebViewId[webViewId],
+              let webView = entry.webView,
+              let containerView = entry.containerView,
+              !containerView.isHidden else {
+            return
+        }
+        refreshHostedWebViewPresentation(
+            webView,
+            in: containerView,
+            reason: reason
+        )
     }
 
     private func pruneDeadEntries() {
@@ -1030,10 +1224,18 @@ final class WindowBrowserPortal: NSObject {
             if container.superview == nil || !container.isDescendant(of: hostView) {
                 return webViewId
             }
-            if anchor.window !== currentWindow || anchor.superview == nil {
+            if anchor.superview == nil {
                 return webViewId
             }
-            if let reference = installedReferenceView,
+            let isOffWindowReparent =
+                entry.visibleInUI &&
+                anchor.window == nil &&
+                anchor.superview != nil
+            if !isOffWindowReparent && anchor.window !== currentWindow {
+                return webViewId
+            }
+            if !isOffWindowReparent,
+               let reference = installedReferenceView,
                !anchor.isDescendant(of: reference) {
                 return webViewId
             }
@@ -1181,6 +1383,15 @@ enum BrowserWindowPortalRegistry {
         portal.synchronizeWebViewForAnchor(anchorView)
     }
 
+    static func isWebView(_ webView: WKWebView, boundTo anchorView: NSView) -> Bool {
+        let webViewId = ObjectIdentifier(webView)
+        guard let window = anchorView.window else { return false }
+        let windowId = ObjectIdentifier(window)
+        guard webViewToWindowId[webViewId] == windowId,
+              let portal = portalsByWindowId[windowId] else { return false }
+        return portal.isWebViewBoundToAnchor(withId: webViewId, anchorView: anchorView)
+    }
+
     /// Update visibleInUI/zPriority on an existing portal entry without rebinding.
     /// Called when a bind is deferred because the new host is temporarily off-window.
     static func updateEntryVisibility(for webView: WKWebView, visibleInUI: Bool, zPriority: Int) {
@@ -1188,6 +1399,13 @@ enum BrowserWindowPortalRegistry {
         guard let windowId = webViewToWindowId[webViewId],
               let portal = portalsByWindowId[windowId] else { return }
         portal.updateEntryVisibility(forWebViewId: webViewId, visibleInUI: visibleInUI, zPriority: zPriority)
+    }
+
+    static func refresh(webView: WKWebView, reason: String) {
+        let webViewId = ObjectIdentifier(webView)
+        guard let windowId = webViewToWindowId[webViewId],
+              let portal = portalsByWindowId[windowId] else { return }
+        portal.forceRefreshWebView(withId: webViewId, reason: reason)
     }
 
     static func detach(webView: WKWebView) {

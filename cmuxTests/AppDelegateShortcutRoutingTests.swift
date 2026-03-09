@@ -201,6 +201,96 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
         XCTAssertEqual(secondManager.tabs.count, secondCount + 1, "Menu-driven add workspace should still route to key window context when object-key lookup misses")
     }
 
+    func testToggleWorkspacePinInActiveMainWindowUsesKeyWindowWhenActiveManagerIsStale() {
+        guard let appDelegate = AppDelegate.shared else {
+            XCTFail("Expected AppDelegate.shared")
+            return
+        }
+
+        let firstWindowId = appDelegate.createMainWindow()
+        let secondWindowId = appDelegate.createMainWindow()
+
+        defer {
+            closeWindow(withId: firstWindowId)
+            closeWindow(withId: secondWindowId)
+        }
+
+        guard let firstManager = appDelegate.tabManagerFor(windowId: firstWindowId),
+              let secondManager = appDelegate.tabManagerFor(windowId: secondWindowId),
+              let secondWindow = window(withId: secondWindowId),
+              let firstWorkspace = firstManager.selectedWorkspace,
+              let secondWorkspace = secondManager.selectedWorkspace else {
+            XCTFail("Expected both window contexts and selected workspaces to exist")
+            return
+        }
+
+        secondWindow.makeKeyAndOrderFront(nil)
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+
+        appDelegate.tabManager = firstManager
+
+        XCTAssertFalse(firstWorkspace.isPinned)
+        XCTAssertFalse(secondWorkspace.isPinned)
+
+        XCTAssertTrue(appDelegate.toggleWorkspacePinInActiveMainWindow())
+
+        XCTAssertFalse(firstWorkspace.isPinned, "Menu-driven pin toggle should not target stale active window")
+        XCTAssertTrue(secondWorkspace.isPinned, "Menu-driven pin toggle should target the key window workspace")
+    }
+
+    func testCmdAltPUsesEventWindowContextWhenActiveManagerIsStale() {
+        guard let appDelegate = AppDelegate.shared else {
+            XCTFail("Expected AppDelegate.shared")
+            return
+        }
+
+        let firstWindowId = appDelegate.createMainWindow()
+        let secondWindowId = appDelegate.createMainWindow()
+
+        defer {
+            closeWindow(withId: firstWindowId)
+            closeWindow(withId: secondWindowId)
+        }
+
+        guard let firstManager = appDelegate.tabManagerFor(windowId: firstWindowId),
+              let secondManager = appDelegate.tabManagerFor(windowId: secondWindowId),
+              let secondWindow = window(withId: secondWindowId),
+              let firstWorkspace = firstManager.selectedWorkspace,
+              let secondWorkspace = secondManager.selectedWorkspace else {
+            XCTFail("Expected both window contexts and selected workspaces to exist")
+            return
+        }
+
+        XCTAssertFalse(firstWorkspace.isPinned)
+        XCTAssertFalse(secondWorkspace.isPinned)
+        XCTAssertTrue(appDelegate.focusMainWindow(windowId: firstWindowId))
+
+        guard let event = NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: [.command, .option],
+            timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: secondWindow.windowNumber,
+            context: nil,
+            characters: "p",
+            charactersIgnoringModifiers: "p",
+            isARepeat: false,
+            keyCode: 35
+        ) else {
+            XCTFail("Failed to construct Cmd+Alt+P event")
+            return
+        }
+
+#if DEBUG
+        XCTAssertTrue(appDelegate.debugHandleCustomShortcut(event: event))
+#else
+        XCTFail("debugHandleCustomShortcut is only available in DEBUG")
+#endif
+
+        XCTAssertFalse(firstWorkspace.isPinned, "Cmd+Alt+P should not route to the stale active window")
+        XCTAssertTrue(secondWorkspace.isPinned, "Cmd+Alt+P should route to the event window workspace")
+    }
+
     func testCmdDigitRoutesToEventWindowWhenActiveManagerIsStale() {
         guard let appDelegate = AppDelegate.shared else {
             XCTFail("Expected AppDelegate.shared")

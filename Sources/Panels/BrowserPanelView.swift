@@ -2987,36 +2987,63 @@ struct WebViewRepresentable: NSViewRepresentable {
         var desiredPortalVisibleInUI: Bool = true
         var desiredPortalZPriority: Int = 0
         var lastPortalHostId: ObjectIdentifier?
+        var lastSynchronizedHostGeometryRevision: UInt64 = 0
     }
 
     private final class HostContainerView: NSView {
         var onDidMoveToWindow: (() -> Void)?
         var onGeometryChanged: (() -> Void)?
+        private(set) var geometryRevision: UInt64 = 0
+        private var lastReportedGeometryState: GeometryState?
+
+        private struct GeometryState: Equatable {
+            let frame: CGRect
+            let bounds: CGRect
+            let windowNumber: Int?
+            let superviewID: ObjectIdentifier?
+        }
+
+        private func currentGeometryState() -> GeometryState {
+            GeometryState(
+                frame: frame,
+                bounds: bounds,
+                windowNumber: window?.windowNumber,
+                superviewID: superview.map(ObjectIdentifier.init)
+            )
+        }
+
+        private func notifyGeometryChangedIfNeeded() {
+            let state = currentGeometryState()
+            guard state != lastReportedGeometryState else { return }
+            lastReportedGeometryState = state
+            geometryRevision &+= 1
+            onGeometryChanged?()
+        }
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             onDidMoveToWindow?()
-            onGeometryChanged?()
+            notifyGeometryChangedIfNeeded()
         }
 
         override func viewDidMoveToSuperview() {
             super.viewDidMoveToSuperview()
-            onGeometryChanged?()
+            notifyGeometryChangedIfNeeded()
         }
 
         override func layout() {
             super.layout()
-            onGeometryChanged?()
+            notifyGeometryChangedIfNeeded()
         }
 
         override func setFrameOrigin(_ newOrigin: NSPoint) {
             super.setFrameOrigin(newOrigin)
-            onGeometryChanged?()
+            notifyGeometryChangedIfNeeded()
         }
 
         override func setFrameSize(_ newSize: NSSize) {
             super.setFrameSize(newSize)
-            onGeometryChanged?()
+            notifyGeometryChangedIfNeeded()
         }
 
         override func hitTest(_ point: NSPoint) -> NSView? {
@@ -3161,12 +3188,14 @@ struct WebViewRepresentable: NSViewRepresentable {
                 zPriority: coordinator.desiredPortalZPriority
             )
             coordinator.lastPortalHostId = ObjectIdentifier(host)
+            coordinator.lastSynchronizedHostGeometryRevision = host.geometryRevision
         }
         host.onGeometryChanged = { [weak host, weak coordinator] in
             guard let host, let coordinator else { return }
             guard coordinator.attachGeneration == generation else { return }
             guard coordinator.lastPortalHostId == ObjectIdentifier(host) else { return }
             BrowserWindowPortalRegistry.synchronizeForAnchor(host)
+            coordinator.lastSynchronizedHostGeometryRevision = host.geometryRevision
         }
 
         if !shouldAttachWebView {
@@ -3177,9 +3206,12 @@ struct WebViewRepresentable: NSViewRepresentable {
 
         if host.window != nil {
             let hostId = ObjectIdentifier(host)
+            let geometryRevision = host.geometryRevision
+            let portalEntryMissing = !BrowserWindowPortalRegistry.isWebView(webView, boundTo: host)
             let shouldBindNow =
                 coordinator.lastPortalHostId != hostId ||
                 webView.superview == nil ||
+                portalEntryMissing ||
                 previousVisible != shouldAttachWebView ||
                 previousZPriority != portalZPriority
             if shouldBindNow {
@@ -3190,8 +3222,13 @@ struct WebViewRepresentable: NSViewRepresentable {
                     zPriority: coordinator.desiredPortalZPriority
                 )
                 coordinator.lastPortalHostId = hostId
+                coordinator.lastSynchronizedHostGeometryRevision = geometryRevision
             }
-            BrowserWindowPortalRegistry.synchronizeForAnchor(host)
+            if !shouldBindNow,
+               coordinator.lastSynchronizedHostGeometryRevision != geometryRevision {
+                BrowserWindowPortalRegistry.synchronizeForAnchor(host)
+                coordinator.lastSynchronizedHostGeometryRevision = geometryRevision
+            }
         } else {
             // Bind is deferred until host moves into a window. Keep the current
             // portal entry's desired state in sync so stale callbacks cannot keep
@@ -3362,6 +3399,7 @@ struct WebViewRepresentable: NSViewRepresentable {
             BrowserWindowPortalRegistry.detach(webView: webView)
             context.coordinator.usesWindowPortal = false
             context.coordinator.lastPortalHostId = nil
+            context.coordinator.lastSynchronizedHostGeometryRevision = 0
         }
         Self.clearPortalCallbacks(for: nsView)
 
@@ -3622,6 +3660,7 @@ struct WebViewRepresentable: NSViewRepresentable {
         if coordinator.usesWindowPortal {
             coordinator.usesWindowPortal = false
             coordinator.lastPortalHostId = nil
+            coordinator.lastSynchronizedHostGeometryRevision = 0
 
             // During split/layout churn we keep the WKWebView portal-hosted so DevTools
             // does not lose state. BrowserPanel deinit explicitly detaches on real teardown.

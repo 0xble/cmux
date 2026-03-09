@@ -204,6 +204,44 @@ struct NotificationInfo {
     let body: String
 }
 
+private let terminalSidebarStreamNotificationTitle = "cmux.sidebar"
+private let terminalSidebarStreamNotificationPrefix = "v1:"
+
+private enum TerminalSidebarStreamOperation: String, Encodable {
+    case setStatus = "ss"
+    case clearStatus = "cs"
+    case setProgress = "sp"
+    case clearProgress = "cp"
+    case log = "lg"
+    case clearLog = "cl"
+}
+
+private struct TerminalSidebarStreamMutation: Encodable {
+    let operation: TerminalSidebarStreamOperation
+    var key: String?
+    var value: String?
+    var icon: String?
+    var color: String?
+    var progress: Double?
+    var label: String?
+    var level: String?
+    var source: String?
+    var message: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case operation = "o"
+        case key = "k"
+        case value = "v"
+        case icon = "i"
+        case color = "c"
+        case progress = "p"
+        case label = "t"
+        case level = "l"
+        case source = "s"
+        case message = "m"
+    }
+}
+
 private struct ClaudeHookParsedInput {
     let rawInput: String
     let object: [String: Any]?
@@ -615,6 +653,7 @@ struct CMUXCLI {
 
     func run() throws {
         var socketPath = ProcessInfo.processInfo.environment["CMUX_SOCKET_PATH"] ?? "/tmp/cmux.sock"
+        var hasExplicitSocketPath = false
         var jsonOutput = false
         var idFormatArg: String? = nil
         var windowId: String? = nil
@@ -628,6 +667,7 @@ struct CMUXCLI {
                     throw CLIError(message: "--socket requires a path")
                 }
                 socketPath = args[index + 1]
+                hasExplicitSocketPath = true
                 index += 2
                 continue
             }
@@ -707,6 +747,15 @@ struct CMUXCLI {
             try client.connect()
             cliTelemetry.breadcrumb("socket.connect.success")
         } catch {
+            if try handleTerminalSidebarFallback(
+                command: command,
+                commandArgs: commandArgs,
+                jsonOutput: jsonOutput,
+                hasExplicitSocketPath: hasExplicitSocketPath,
+                explicitWindowId: windowId
+            ) {
+                return
+            }
             cliTelemetry.breadcrumb("socket.connect.failure")
             cliTelemetry.captureError(stage: "socket_connect", error: error)
             throw error
@@ -4093,6 +4142,237 @@ struct CMUXCLI {
         // When --window is explicitly targeted, don't fall back to env workspace from a different window
         if windowOverride != nil { return nil }
         return ProcessInfo.processInfo.environment["CMUX_WORKSPACE_ID"]
+    }
+
+    private func supportsTerminalSidebarFallback() -> Bool {
+        ProcessInfo.processInfo.environment["LC_CMUX"] == "1" && isatty(STDOUT_FILENO) == 1
+    }
+
+    private func truncatedTerminalSidebarField(_ value: String?, maxLength: Int) -> String? {
+        guard let value else { return nil }
+        guard value.count > maxLength else { return value }
+        guard maxLength > 3 else { return String(value.prefix(maxLength)) }
+        return String(value.prefix(maxLength - 3)) + "..."
+    }
+
+    private func encodedTerminalSidebarMutation(_ mutation: TerminalSidebarStreamMutation) throws -> String {
+        var fitted = mutation
+        fitted.value = truncatedTerminalSidebarField(fitted.value, maxLength: 140)
+        fitted.label = truncatedTerminalSidebarField(fitted.label, maxLength: 120)
+        fitted.source = truncatedTerminalSidebarField(fitted.source, maxLength: 48)
+        fitted.message = truncatedTerminalSidebarField(fitted.message, maxLength: 150)
+
+        let encoder = JSONEncoder()
+        func encodeBody(_ payload: TerminalSidebarStreamMutation) throws -> String {
+            let data = try encoder.encode(payload)
+            return terminalSidebarStreamNotificationPrefix + data.base64EncodedString()
+        }
+
+        var body = try encodeBody(fitted)
+        while body.count > 255 {
+            if let message = fitted.message, message.count > 24 {
+                fitted.message = truncatedTerminalSidebarField(message, maxLength: message.count - 12)
+            } else if let value = fitted.value, value.count > 24 {
+                fitted.value = truncatedTerminalSidebarField(value, maxLength: value.count - 12)
+            } else if let label = fitted.label, label.count > 24 {
+                fitted.label = truncatedTerminalSidebarField(label, maxLength: label.count - 12)
+            } else if let source = fitted.source, source.count > 16 {
+                fitted.source = truncatedTerminalSidebarField(source, maxLength: source.count - 8)
+            } else {
+                throw CLIError(message: "Remote sidebar payload too large for terminal transport")
+            }
+            body = try encodeBody(fitted)
+        }
+
+        return body
+    }
+
+    private func emitTerminalSidebarMutation(_ mutation: TerminalSidebarStreamMutation) throws {
+        let body = try encodedTerminalSidebarMutation(mutation)
+        let sequence = "\u{001B}]777;notify;\(terminalSidebarStreamNotificationTitle);\(body)\u{0007}"
+        guard let data = sequence.data(using: .utf8) else {
+            throw CLIError(message: "Failed to encode terminal sidebar payload")
+        }
+        FileHandle.standardOutput.write(data)
+    }
+
+    private func printRemoteFallbackSuccess(jsonOutput: Bool) {
+        if jsonOutput {
+            print(jsonString([
+                "ok": true,
+                "transport": "terminal-stream"
+            ]))
+        } else {
+            print("OK")
+        }
+    }
+
+    private func handleTerminalSidebarFallback(
+        command: String,
+        commandArgs: [String],
+        jsonOutput: Bool,
+        hasExplicitSocketPath: Bool,
+        explicitWindowId: String?
+    ) throws -> Bool {
+        guard !hasExplicitSocketPath, explicitWindowId == nil else { return false }
+        guard supportsTerminalSidebarFallback() else { return false }
+
+        switch command {
+        case "set-status":
+            let (icon, r1) = parseOption(commandArgs, name: "--icon")
+            let (color, r2) = parseOption(r1, name: "--color")
+            let (wsFlag, r3) = parseOption(r2, name: "--workspace")
+            guard wsFlag == nil else {
+                throw CLIError(message: "set-status --workspace requires a local cmux socket")
+            }
+            guard r3.count >= 2 else {
+                throw CLIError(message: "set-status requires <key> and <value>")
+            }
+            let key = r3[0]
+            let value = r3.dropFirst().joined(separator: " ")
+            guard !value.isEmpty else {
+                throw CLIError(message: "set-status requires a non-empty value")
+            }
+            try emitTerminalSidebarMutation(
+                TerminalSidebarStreamMutation(
+                    operation: .setStatus,
+                    key: key,
+                    value: value,
+                    icon: icon,
+                    color: color,
+                    progress: nil,
+                    label: nil,
+                    level: nil,
+                    source: nil,
+                    message: nil
+                )
+            )
+            printRemoteFallbackSuccess(jsonOutput: jsonOutput)
+            return true
+        case "clear-status":
+            let (wsFlag, remaining) = parseOption(commandArgs, name: "--workspace")
+            guard wsFlag == nil else {
+                throw CLIError(message: "clear-status --workspace requires a local cmux socket")
+            }
+            guard let key = remaining.first else {
+                throw CLIError(message: "clear-status requires a <key>")
+            }
+            try emitTerminalSidebarMutation(
+                TerminalSidebarStreamMutation(
+                    operation: .clearStatus,
+                    key: key,
+                    value: nil,
+                    icon: nil,
+                    color: nil,
+                    progress: nil,
+                    label: nil,
+                    level: nil,
+                    source: nil,
+                    message: nil
+                )
+            )
+            printRemoteFallbackSuccess(jsonOutput: jsonOutput)
+            return true
+        case "set-progress":
+            let (label, r1) = parseOption(commandArgs, name: "--label")
+            let (wsFlag, remaining) = parseOption(r1, name: "--workspace")
+            guard wsFlag == nil else {
+                throw CLIError(message: "set-progress --workspace requires a local cmux socket")
+            }
+            guard let rawValue = remaining.first,
+                  let progress = Double(rawValue),
+                  progress.isFinite else {
+                throw CLIError(message: "set-progress requires a progress value (0.0-1.0)")
+            }
+            try emitTerminalSidebarMutation(
+                TerminalSidebarStreamMutation(
+                    operation: .setProgress,
+                    key: nil,
+                    value: nil,
+                    icon: nil,
+                    color: nil,
+                    progress: progress,
+                    label: label,
+                    level: nil,
+                    source: nil,
+                    message: nil
+                )
+            )
+            printRemoteFallbackSuccess(jsonOutput: jsonOutput)
+            return true
+        case "clear-progress":
+            let (wsFlag, _) = parseOption(commandArgs, name: "--workspace")
+            guard wsFlag == nil else {
+                throw CLIError(message: "clear-progress --workspace requires a local cmux socket")
+            }
+            try emitTerminalSidebarMutation(
+                TerminalSidebarStreamMutation(
+                    operation: .clearProgress,
+                    key: nil,
+                    value: nil,
+                    icon: nil,
+                    color: nil,
+                    progress: nil,
+                    label: nil,
+                    level: nil,
+                    source: nil,
+                    message: nil
+                )
+            )
+            printRemoteFallbackSuccess(jsonOutput: jsonOutput)
+            return true
+        case "log":
+            let (level, r1) = parseOption(commandArgs, name: "--level")
+            let (source, r2) = parseOption(r1, name: "--source")
+            let (wsFlag, r3) = parseOption(r2, name: "--workspace")
+            guard wsFlag == nil else {
+                throw CLIError(message: "log --workspace requires a local cmux socket")
+            }
+            let positional = r3.first == "--" ? Array(r3.dropFirst()) : r3
+            let message = positional.joined(separator: " ")
+            guard !message.isEmpty else {
+                throw CLIError(message: "log requires a message")
+            }
+            try emitTerminalSidebarMutation(
+                TerminalSidebarStreamMutation(
+                    operation: .log,
+                    key: nil,
+                    value: nil,
+                    icon: nil,
+                    color: nil,
+                    progress: nil,
+                    label: nil,
+                    level: level ?? "info",
+                    source: source,
+                    message: message
+                )
+            )
+            printRemoteFallbackSuccess(jsonOutput: jsonOutput)
+            return true
+        case "clear-log":
+            let (wsFlag, _) = parseOption(commandArgs, name: "--workspace")
+            guard wsFlag == nil else {
+                throw CLIError(message: "clear-log --workspace requires a local cmux socket")
+            }
+            try emitTerminalSidebarMutation(
+                TerminalSidebarStreamMutation(
+                    operation: .clearLog,
+                    key: nil,
+                    value: nil,
+                    icon: nil,
+                    color: nil,
+                    progress: nil,
+                    label: nil,
+                    level: nil,
+                    source: nil,
+                    message: nil
+                )
+            )
+            printRemoteFallbackSuccess(jsonOutput: jsonOutput)
+            return true
+        default:
+            return false
+        }
     }
 
     /// Pick the display handle for an item dict based on --id-format.

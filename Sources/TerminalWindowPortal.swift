@@ -698,12 +698,13 @@ final class WindowTerminalPortal: NSObject {
         synchronizeAllHostedViews(excluding: nil)
 
         // During live resize, AppKit can deliver frame churn where host/container geometry
-        // settles a tick before the terminal's own scroll/surface hierarchy. Force a final
-        // in-place geometry + surface refresh for all visible entries in this window.
+        // settles a tick before the terminal's own scroll/surface hierarchy. Only force an
+        // in-place surface refresh when reconciliation actually changed terminal geometry.
         for entry in entriesByHostedId.values {
             guard let hostedView = entry.hostedView, !hostedView.isHidden else { continue }
-            hostedView.reconcileGeometryNow()
-            hostedView.refreshSurfaceNow()
+            if hostedView.reconcileGeometryNow() {
+                hostedView.refreshSurfaceNow(reason: "portal.externalGeometrySync")
+            }
         }
     }
 
@@ -1362,7 +1363,7 @@ final class WindowTerminalPortal: NSObject {
             hostedView.frame = targetFrame
             CATransaction.commit()
             hostedView.reconcileGeometryNow()
-            hostedView.refreshSurfaceNow()
+            hostedView.refreshSurfaceNow(reason: "portal.frameChange")
         }
 
         if hasFiniteFrame {
@@ -1401,7 +1402,7 @@ final class WindowTerminalPortal: NSObject {
             // normal frame-change refresh path won't run. Nudge geometry + redraw so newly
             // revealed terminals don't sit on a stale/blank IOSurface until later focus churn.
             hostedView.reconcileGeometryNow()
-            hostedView.refreshSurfaceNow()
+            hostedView.refreshSurfaceNow(reason: "portal.reveal")
         }
 
         if transientRecoveryReason == nil {
@@ -1586,11 +1587,60 @@ enum TerminalWindowPortalRegistry {
         return portal
     }
 
-    static func bind(hostedView: GhosttySurfaceScrollView, to anchorView: NSView, visibleInUI: Bool, zPriority: Int = 0) {
+    private static func bindBlockReason(
+        expectedSurfaceId: UUID?,
+        expectedGeneration: UInt64?,
+        actual: (surfaceId: UUID?, generation: UInt64?, state: String)
+    ) -> String {
+        if actual.surfaceId == nil {
+            return "missingSurface"
+        }
+        if let expectedSurfaceId, actual.surfaceId != expectedSurfaceId {
+            return "surfaceMismatch"
+        }
+        if let expectedGeneration, actual.generation != expectedGeneration {
+            return "generationMismatch"
+        }
+        return "state:\(actual.state)"
+    }
+
+    static func bind(
+        hostedView: GhosttySurfaceScrollView,
+        to anchorView: NSView,
+        visibleInUI: Bool,
+        zPriority: Int = 0,
+        expectedSurfaceId: UUID? = nil,
+        expectedGeneration: UInt64? = nil
+    ) {
         guard let window = anchorView.window else { return }
 
         let windowId = ObjectIdentifier(window)
         let hostedId = ObjectIdentifier(hostedView)
+        let guardState = hostedView.portalBindingGuardState()
+        guard hostedView.canAcceptPortalBinding(
+            expectedSurfaceId: expectedSurfaceId,
+            expectedGeneration: expectedGeneration
+        ) else {
+            if let oldWindowId = hostedToWindowId.removeValue(forKey: hostedId) {
+                portalsByWindowId[oldWindowId]?.detachHostedView(withId: hostedId)
+            }
+#if DEBUG
+            let reason = bindBlockReason(
+                expectedSurfaceId: expectedSurfaceId,
+                expectedGeneration: expectedGeneration,
+                actual: guardState
+            )
+            dlog(
+                "portal.bind.blocked hosted=\(portalDebugToken(hostedView)) " +
+                "reason=\(reason) expectedSurface=\(expectedSurfaceId?.uuidString.prefix(5) ?? "nil") " +
+                "expectedGeneration=\(expectedGeneration.map { String($0) } ?? "nil") " +
+                "actualSurface=\(guardState.surfaceId?.uuidString.prefix(5) ?? "nil") " +
+                "actualGeneration=\(guardState.generation.map { String($0) } ?? "nil") " +
+                "actualState=\(guardState.state)"
+            )
+#endif
+            return
+        }
         let nextPortal = portal(for: window)
 
         if let oldWindowId = hostedToWindowId[hostedId],

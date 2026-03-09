@@ -2573,7 +2573,7 @@ class TabManager: ObservableObject {
                             continue
                         }
                         terminal.hostedView.reconcileGeometryNow()
-                        terminal.surface.forceRefresh()
+                        terminal.surface.forceRefresh(reason: "tabManager.reconcileVisibleTerminalGeometry")
                     }
                 }
 
