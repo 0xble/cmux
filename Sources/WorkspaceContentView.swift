@@ -21,10 +21,12 @@ struct WorkspaceContentView: View {
 
     static func panelVisibleInUI(
         isWorkspaceVisible: Bool,
+        isPaneVisibleInLayout: Bool,
         isSelectedInPane: Bool,
         isFocused: Bool
     ) -> Bool {
         guard isWorkspaceVisible else { return false }
+        guard isPaneVisibleInLayout else { return false }
         // During pane/tab reparenting, Bonsplit can transiently report selected=false
         // for the currently focused panel. Keep focused content visible to avoid blank frames.
         return isSelectedInPane || isFocused
@@ -58,8 +60,10 @@ struct WorkspaceContentView: View {
             if let panel = workspace.panel(for: tab.id) {
                 let isFocused = isWorkspaceInputActive && workspace.focusedPanelId == panel.id
                 let isSelectedInPane = workspace.bonsplitController.selectedTab(inPane: paneId)?.id == tab.id
+                let isPaneVisibleInLayout = workspace.bonsplitController.zoomedPaneId.map { $0 == paneId } ?? true
                 let isVisibleInUI = Self.panelVisibleInUI(
                     isWorkspaceVisible: isWorkspaceVisible,
+                    isPaneVisibleInLayout: isPaneVisibleInLayout,
                     isSelectedInPane: isSelectedInPane,
                     isFocused: isFocused
                 )

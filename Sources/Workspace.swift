@@ -3212,7 +3212,9 @@ final class Workspace: Identifiable, ObservableObject {
 
     @discardableResult
     func clearSplitZoom() -> Bool {
-        bonsplitController.clearPaneZoom()
+        guard bonsplitController.clearPaneZoom() else { return false }
+        reconcilePanelPortalVisibilityForCurrentLayout()
+        return true
     }
 
     @discardableResult
@@ -3220,6 +3222,7 @@ final class Workspace: Identifiable, ObservableObject {
         guard let paneId = paneId(forPanelId: panelId) else { return false }
         guard bonsplitController.togglePaneZoom(inPane: paneId) else { return false }
         focusPanel(panelId)
+        reconcilePanelPortalVisibilityForCurrentLayout()
         return true
     }
 
@@ -3268,6 +3271,51 @@ final class Workspace: Identifiable, ObservableObject {
     }
 
     // MARK: - Portal Lifecycle
+
+    private func shouldPanelBeVisibleInCurrentLayout(_ panelId: UUID) -> Bool {
+        guard let paneId = paneId(forPanelId: panelId),
+              let surfaceId = surfaceIdFromPanelId(panelId) else { return false }
+
+        if let zoomedPaneId = bonsplitController.zoomedPaneId, paneId != zoomedPaneId {
+            return false
+        }
+
+        let isSelectedInPane = bonsplitController.selectedTab(inPane: paneId)?.id == surfaceId
+        let isFocused = focusedPanelId == panelId
+        return isSelectedInPane || isFocused
+    }
+
+    /// Force portal-hosted surfaces to match the currently rendered bonsplit layout.
+    /// This is needed when panes are structurally hidden by zoom, because AppKit-hosted
+    /// portal content can outlive the SwiftUI subtree briefly and keep painting.
+    func reconcilePanelPortalVisibilityForCurrentLayout() {
+        for panel in panels.values {
+            let isVisibleInUI = shouldPanelBeVisibleInCurrentLayout(panel.id)
+            switch panel.panelType {
+            case .terminal:
+                guard let terminal = panel as? TerminalPanel else { continue }
+                terminal.hostedView.setVisibleInUI(isVisibleInUI)
+                TerminalWindowPortalRegistry.updateEntryVisibility(
+                    for: terminal.hostedView,
+                    visibleInUI: isVisibleInUI
+                )
+                if !isVisibleInUI {
+                    TerminalWindowPortalRegistry.hideHostedView(terminal.hostedView)
+                }
+            case .browser:
+                guard let browser = panel as? BrowserPanel else { continue }
+                if !isVisibleInUI {
+                    BrowserWindowPortalRegistry.updateEntryVisibility(
+                        for: browser.webView,
+                        visibleInUI: false,
+                        zPriority: 0
+                    )
+                }
+            case .markdown:
+                continue
+            }
+        }
+    }
 
     /// Hide all terminal portal views for this workspace.
     /// Called before the workspace is unmounted to prevent portal-hosted terminal
