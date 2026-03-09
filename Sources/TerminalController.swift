@@ -13046,15 +13046,14 @@ class TerminalController {
             ) else {
                 return
             }
-            tab.statusEntries[key] = SidebarStatusEntry(
+            _ = tab.upsertSidebarStatusEntry(
                 key: key,
                 value: value,
                 icon: icon,
                 color: color,
                 url: parsedURL,
                 priority: priority,
-                format: format,
-                timestamp: Date()
+                format: format
             )
         }
         return "OK"
@@ -13072,7 +13071,7 @@ class TerminalController {
                 result = parsed.options["tab"] != nil ? "ERROR: Tab not found" : "ERROR: No tab selected"
                 return
             }
-            if tab.statusEntries.removeValue(forKey: key) == nil {
+            if !tab.removeSidebarStatusEntry(key: key) {
                 result = "OK (key not found)"
             }
         }
@@ -13268,12 +13267,7 @@ class TerminalController {
                 result = parsed.options["tab"] != nil ? "ERROR: Tab not found" : "ERROR: No tab selected"
                 return
             }
-            tab.logEntries.append(SidebarLogEntry(message: message, level: level, source: source, timestamp: Date()))
-            let configuredLimit = UserDefaults.standard.object(forKey: "sidebarMaxLogEntries") as? Int ?? 50
-            let limit = max(1, min(500, configuredLimit))
-            if tab.logEntries.count > limit {
-                tab.logEntries.removeFirst(tab.logEntries.count - limit)
-            }
+            tab.appendSidebarLog(message: message, level: level, source: source)
         }
         return result
     }
@@ -13285,7 +13279,7 @@ class TerminalController {
                 result = "ERROR: Tab not found"
                 return
             }
-            tab.logEntries.removeAll()
+            _ = tab.clearSidebarLogEntries()
         }
         return result
     }
@@ -13347,10 +13341,7 @@ class TerminalController {
                 result = parsed.options["tab"] != nil ? "ERROR: Tab not found" : "ERROR: No tab selected"
                 return
             }
-            guard Self.shouldReplaceProgress(current: tab.progress, value: clamped, label: label) else {
-                return
-            }
-            tab.progress = SidebarProgressState(value: clamped, label: label)
+            _ = tab.setSidebarProgress(value: clamped, label: label)
         }
         return result
     }
@@ -13362,9 +13353,7 @@ class TerminalController {
                 result = "ERROR: Tab not found"
                 return
             }
-            if tab.progress != nil {
-                tab.progress = nil
-            }
+            _ = tab.clearSidebarProgress()
         }
         return result
     }
