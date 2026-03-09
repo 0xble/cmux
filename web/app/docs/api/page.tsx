@@ -285,7 +285,10 @@ cmux list-notifications --json`}
       <p>
         Set status pills, progress bars, and log entries in the sidebar for any
         workspace. Useful for build scripts, CI integrations, and AI coding
-        agents that want to surface state at a glance.
+        agents that want to surface state at a glance. When the local cmux
+        socket is unavailable but the shell is still inside a cmux-backed
+        terminal, mutating commands fall back to terminal-stream updates so SSH
+        hops can still write sidebar state.
       </p>
 
       <Cmd

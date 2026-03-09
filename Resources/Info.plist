@@ -98,7 +98,7 @@
 		<true/>
 	</dict>
 	<key>SUFeedURL</key>
-	<string>https://github.com/manaflow-ai/cmux/releases/latest/download/appcast.xml</string>
+	<string>https://github.com/0xble/cmux/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>$(SPARKLE_PUBLIC_KEY)</string>
 </dict>
