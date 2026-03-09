@@ -3273,22 +3273,26 @@ final class Workspace: Identifiable, ObservableObject {
     // MARK: - Portal Lifecycle
 
     private func shouldPanelBeVisibleInCurrentLayout(_ panelId: UUID) -> Bool {
-        guard let paneId = paneId(forPanelId: panelId),
-              let surfaceId = surfaceIdFromPanelId(panelId) else { return false }
+        guard let paneId = paneId(forPanelId: panelId) else { return false }
 
         if let zoomedPaneId = bonsplitController.zoomedPaneId, paneId != zoomedPaneId {
             return false
         }
 
-        let isSelectedInPane = bonsplitController.selectedTab(inPane: paneId)?.id == surfaceId
         let isFocused = focusedPanelId == panelId
+        if isFocused {
+            return true
+        }
+
+        guard let surfaceId = surfaceIdFromPanelId(panelId) else { return false }
+        let isSelectedInPane = bonsplitController.selectedTab(inPane: paneId)?.id == surfaceId
         return isSelectedInPane || isFocused
     }
 
     /// Force portal-hosted surfaces to match the currently rendered bonsplit layout.
     /// This is needed when panes are structurally hidden by zoom, because AppKit-hosted
     /// portal content can outlive the SwiftUI subtree briefly and keep painting.
-    func reconcilePanelPortalVisibilityForCurrentLayout() {
+    private func reconcilePanelPortalVisibilityForCurrentLayout() {
         for panel in panels.values {
             let isVisibleInUI = shouldPanelBeVisibleInCurrentLayout(panel.id)
             switch panel.panelType {
@@ -3304,13 +3308,11 @@ final class Workspace: Identifiable, ObservableObject {
                 }
             case .browser:
                 guard let browser = panel as? BrowserPanel else { continue }
-                if !isVisibleInUI {
-                    BrowserWindowPortalRegistry.updateEntryVisibility(
-                        for: browser.webView,
-                        visibleInUI: false,
-                        zPriority: 0
-                    )
-                }
+                BrowserWindowPortalRegistry.updateEntryVisibleInUI(
+                    for: browser.webView,
+                    visibleInUI: isVisibleInUI
+                )
+                BrowserWindowPortalRegistry.synchronizeForAnchor(browser.portalAnchorView)
             case .markdown:
                 continue
             }

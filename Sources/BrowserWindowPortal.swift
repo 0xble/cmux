@@ -2103,6 +2103,13 @@ final class WindowBrowserPortal: NSObject {
         entriesByWebViewId[webViewId] = entry
     }
 
+    func updateEntryVisibleInUI(forWebViewId webViewId: ObjectIdentifier, visibleInUI: Bool) {
+        guard var entry = entriesByWebViewId[webViewId] else { return }
+        guard entry.visibleInUI != visibleInUI else { return }
+        entry.visibleInUI = visibleInUI
+        entriesByWebViewId[webViewId] = entry
+    }
+
     func isWebViewBoundToAnchor(withId webViewId: ObjectIdentifier, anchorView: NSView) -> Bool {
         guard let entry = entriesByWebViewId[webViewId],
               let boundAnchor = entry.anchorView else { return false }
@@ -2964,6 +2971,13 @@ enum BrowserWindowPortalRegistry {
         guard let windowId = webViewToWindowId[webViewId],
               let portal = portalsByWindowId[windowId] else { return }
         portal.updateEntryVisibility(forWebViewId: webViewId, visibleInUI: visibleInUI, zPriority: zPriority)
+    }
+
+    static func updateEntryVisibleInUI(for webView: WKWebView, visibleInUI: Bool) {
+        let webViewId = ObjectIdentifier(webView)
+        guard let windowId = webViewToWindowId[webViewId],
+              let portal = portalsByWindowId[windowId] else { return }
+        portal.updateEntryVisibleInUI(forWebViewId: webViewId, visibleInUI: visibleInUI)
     }
 
     static func isWebView(_ webView: WKWebView, boundTo anchorView: NSView) -> Bool {
