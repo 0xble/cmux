@@ -3312,7 +3312,6 @@ final class Workspace: Identifiable, ObservableObject {
                     for: browser.webView,
                     visibleInUI: isVisibleInUI
                 )
-                BrowserWindowPortalRegistry.synchronizeForAnchor(browser.portalAnchorView)
             case .markdown:
                 continue
             }

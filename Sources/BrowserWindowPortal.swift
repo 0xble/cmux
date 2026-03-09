@@ -2108,6 +2108,7 @@ final class WindowBrowserPortal: NSObject {
         guard entry.visibleInUI != visibleInUI else { return }
         entry.visibleInUI = visibleInUI
         entriesByWebViewId[webViewId] = entry
+        synchronizeWebView(withId: webViewId, source: "visibilityChange")
     }
 
     func isWebViewBoundToAnchor(withId webViewId: ObjectIdentifier, anchorView: NSView) -> Bool {
