@@ -21,7 +21,7 @@ struct WorkspaceContentView: View {
 
     static func panelVisibleInUI(
         isWorkspaceVisible: Bool,
-        isPaneVisibleInLayout: Bool,
+        isPaneVisibleInLayout: Bool = true,
         isSelectedInPane: Bool,
         isFocused: Bool
     ) -> Bool {

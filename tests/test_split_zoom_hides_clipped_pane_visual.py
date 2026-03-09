@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -32,6 +33,13 @@ SOCKET_PATH = os.environ.get("CMUX_SOCKET", "/tmp/cmux-debug.sock")
 MAX_AFTER_DIFF_PIXELS = 6_000
 MIN_DURING_DIFF_PIXELS = 8_000
 MIN_DURING_TO_AFTER_RATIO = 3.0
+MAGICK_BIN = shutil.which("magick")
+
+
+def _require_magick() -> str:
+    if MAGICK_BIN:
+        return MAGICK_BIN
+    raise RuntimeError("ImageMagick `magick` CLI not found")
 
 
 def _wait_until(predicate, timeout_s: float = 5.0, interval_s: float = 0.05) -> bool:
@@ -52,7 +60,7 @@ def _capture_screenshot(client: cmux, label: str) -> str:
 
 def _image_size(path: str) -> tuple[int, int]:
     result = subprocess.run(
-        ["magick", "identify", "-format", "%w %h", path],
+        [_require_magick(), "identify", "-format", "%w %h", path],
         capture_output=True,
         text=True,
         check=True,
@@ -70,7 +78,7 @@ def _crop_right_focus_region(path: str, label: str) -> str:
     output = Path(tempfile.gettempdir()) / f"{label}_{Path(path).name}"
     subprocess.run(
         [
-            "magick",
+            _require_magick(),
             path,
             "-crop",
             f"{crop_width}x{crop_height}+{crop_x}+{crop_y}",
@@ -86,7 +94,7 @@ def _crop_right_focus_region(path: str, label: str) -> str:
 
 def _image_diff_pixels(path_a: str, path_b: str) -> int:
     result = subprocess.run(
-        ["magick", "compare", "-metric", "AE", path_a, path_b, "null:"],
+        [_require_magick(), "compare", "-metric", "AE", path_a, path_b, "null:"],
         capture_output=True,
         text=True,
         check=False,
