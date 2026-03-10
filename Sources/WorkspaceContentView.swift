@@ -121,6 +121,9 @@ struct WorkspaceContentView: View {
         .onChange(of: workspace.manualUnreadPanelIds) { _, _ in
             syncBonsplitNotificationBadges()
         }
+        .onChange(of: workspace.bonsplitController.zoomedPaneId) { _, _ in
+            workspace.reconcilePanelPortalVisibilityForCurrentLayout()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .ghosttyConfigDidReload)) { _ in
             GhosttyConfig.invalidateLoadCache()
             refreshGhosttyAppearanceConfig(reason: "ghosttyConfigDidReload")

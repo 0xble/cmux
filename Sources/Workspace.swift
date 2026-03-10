@@ -1176,9 +1176,6 @@ final class Workspace: Identifiable, ObservableObject {
         bonsplitController.onExternalTabDrop = { [weak self] request in
             self?.handleExternalTabDrop(request) ?? false
         }
-        bonsplitController.onZoomStateChange = { [weak self] _ in
-            self?.reconcilePanelPortalVisibilityForCurrentLayout()
-        }
 
         // Set ourselves as delegate
         bonsplitController.delegate = self
@@ -3289,13 +3286,13 @@ final class Workspace: Identifiable, ObservableObject {
 
         guard let surfaceId = surfaceIdFromPanelId(panelId) else { return false }
         let isSelectedInPane = bonsplitController.selectedTab(inPane: paneId)?.id == surfaceId
-        return isSelectedInPane || isFocused
+        return isSelectedInPane
     }
 
     /// Force portal-hosted surfaces to match the currently rendered bonsplit layout.
     /// This is needed when panes are structurally hidden by zoom, because AppKit-hosted
     /// portal content can outlive the SwiftUI subtree briefly and keep painting.
-    private func reconcilePanelPortalVisibilityForCurrentLayout() {
+    func reconcilePanelPortalVisibilityForCurrentLayout() {
         for panel in panels.values {
             let isVisibleInUI = shouldPanelBeVisibleInCurrentLayout(panel.id)
             switch panel.panelType {
