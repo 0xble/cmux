@@ -1176,6 +1176,9 @@ final class Workspace: Identifiable, ObservableObject {
         bonsplitController.onExternalTabDrop = { [weak self] request in
             self?.handleExternalTabDrop(request) ?? false
         }
+        bonsplitController.onZoomStateChange = { [weak self] _ in
+            self?.reconcilePanelPortalVisibilityForCurrentLayout()
+        }
 
         // Set ourselves as delegate
         bonsplitController.delegate = self
@@ -3308,10 +3311,22 @@ final class Workspace: Identifiable, ObservableObject {
                 }
             case .browser:
                 guard let browser = panel as? BrowserPanel else { continue }
-                BrowserWindowPortalRegistry.updateEntryVisibleInUI(
-                    for: browser.webView,
-                    visibleInUI: isVisibleInUI
-                )
+                if isVisibleInUI {
+                    BrowserWindowPortalRegistry.updateEntryVisibleInUI(
+                        for: browser.webView,
+                        visibleInUI: true
+                    )
+                } else {
+                    BrowserWindowPortalRegistry.updateEntryVisibility(
+                        for: browser.webView,
+                        visibleInUI: false,
+                        zPriority: 0
+                    )
+                    BrowserWindowPortalRegistry.hide(
+                        webView: browser.webView,
+                        source: "layoutReconcile"
+                    )
+                }
             case .markdown:
                 continue
             }
