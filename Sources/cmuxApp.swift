@@ -16,6 +16,16 @@ struct cmuxApp: App {
     private var showSidebarDevBuildBanner = DevBuildBannerDebugSettings.defaultShowSidebarBanner
     @AppStorage(SocketControlSettings.appStorageKey) private var socketControlMode = SocketControlSettings.defaultMode.rawValue
     @AppStorage(BrowserToolbarAccessorySpacingDebugSettings.key) private var browserToolbarAccessorySpacingRaw = BrowserToolbarAccessorySpacingDebugSettings.defaultSpacing
+    @AppStorage(KeyboardShortcutSettings.Action.toggleBrowserDeveloperTools.defaultsKey)
+    private var toggleBrowserDeveloperToolsShortcutData = Data()
+    @AppStorage(KeyboardShortcutSettings.Action.showBrowserJavaScriptConsole.defaultsKey)
+    private var showBrowserJavaScriptConsoleShortcutData = Data()
+    @AppStorage(KeyboardShortcutSettings.Action.splitBrowserRight.defaultsKey) private var splitBrowserRightShortcutData = Data()
+    @AppStorage(KeyboardShortcutSettings.Action.splitBrowserDown.defaultsKey) private var splitBrowserDownShortcutData = Data()
+    @AppStorage(KeyboardShortcutSettings.Action.renameWorkspace.defaultsKey) private var renameWorkspaceShortcutData = Data()
+    @AppStorage(KeyboardShortcutSettings.Action.openFolder.defaultsKey) private var openFolderShortcutData = Data()
+    @AppStorage(KeyboardShortcutSettings.Action.toggleWorkspacePin.defaultsKey) private var toggleWorkspacePinShortcutData = Data()
+    @AppStorage(KeyboardShortcutSettings.Action.closeWorkspace.defaultsKey) private var closeWorkspaceShortcutData = Data()
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @Environment(\.openWindow) private var openWindow
 
@@ -742,6 +752,17 @@ struct cmuxApp: App {
                 performSplitFromMenu(direction: .down)
             }
 
+splitCommandButton(
+                title: activeTabManager.selectedWorkspace?.isPinned == true
+                    ? String(localized: "contextMenu.unpinWorkspace", defaultValue: "Unpin Workspace")
+                    : String(localized: "contextMenu.pinWorkspace", defaultValue: "Pin Workspace"),
+                shortcut: menuShortcut(for: .toggleWorkspacePin)
+            ) {
+                _ = AppDelegate.shared?.toggleWorkspacePinInActiveMainWindow()
+            }
+
+            Divider()
+
             splitCommandButton(title: String(localized: "menu.view.splitBrowserRight", defaultValue: "Split Browser Right"), shortcut: menuShortcut(for: .splitBrowserRight)) {
                 performBrowserSplitFromMenu(direction: .right)
             }
@@ -836,7 +857,20 @@ struct cmuxApp: App {
 
     func menuShortcut(for action: KeyboardShortcutSettings.Action) -> StoredShortcut {
         let _ = keyboardShortcutSettingsObserver.revision
-        return KeyboardShortcutSettings.menuShortcut(for: action)
+splitCommandButton(
+                title: activeTabManager.selectedWorkspace?.isPinned == true
+                    ? String(localized: "contextMenu.unpinWorkspace", defaultValue: "Unpin Workspace")
+                    : String(localized: "contextMenu.pinWorkspace", defaultValue: "Pin Workspace"),
+                shortcut: menuShortcut(for: .toggleWorkspacePin)
+            ) {
+                _ = AppDelegate.shared?.toggleWorkspacePinInActiveMainWindow()
+            }
+
+            Divider()
+
+            splitCommandButton(title: String(localized: "menu.view.splitBrowserRight", defaultValue: "Split Browser Right"), shortcut: menuShortcut(for: .splitBrowserRight)) {
+                performBrowserSplitFromMenu(direction: .right)
+            }
     }
 
     private var notificationMenuSnapshot: NotificationMenuSnapshot {
