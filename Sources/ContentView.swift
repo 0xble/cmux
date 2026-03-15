@@ -6349,6 +6349,8 @@ struct ContentView: View {
             return .renameWorkspace
         case "palette.editWorkspaceDescription":
             return .editWorkspaceDescription
+        case "palette.toggleWorkspacePin":
+            return .toggleWorkspacePin
         case "palette.nextWorkspace":
             return .nextSidebarTab
         case "palette.previousWorkspace":

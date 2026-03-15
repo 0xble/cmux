@@ -155,6 +155,7 @@ For more info on how to configure cmux, [head over to our docs](https://cmux.com
 | ⌃ ⌘ [ | Previous workspace |
 | ⌘ ⇧ W | Close workspace |
 | ⌘ ⇧ R | Rename workspace |
+| ⌥ ⌘ P | Pin or unpin workspace |
 | ⌘ B | Toggle sidebar |
 
 ### Surfaces
