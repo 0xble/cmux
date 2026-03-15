@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Build, sign, notarize, create DMG, generate appcast, and upload to GitHub release.
 # Usage: ./scripts/build-sign-upload.sh <tag> [--allow-overwrite]
-# Requires: source ~/.secrets/cmuxterm.env && export SPARKLE_PRIVATE_KEY
+# Requires: SPARKLE_PRIVATE_KEY plus local signing/notary credentials in shell env
 
 usage() {
   cat <<'EOF'
@@ -49,13 +49,23 @@ TAG="$1"
 SIGN_HASH="A050CC7E193C8221BDBA204E731B046CDCCC1B30"
 ENTITLEMENTS="cmux.entitlements"
 APP_PATH="build/Build/Products/Release/cmux.app"
+NOTARYTOOL_PROFILE="${NOTARYTOOL_PROFILE:-notarytool-profile}"
+RELEASE_REPO="${RELEASE_REPO:-0xble/cmux}"
 
 # --- Pre-flight ---
 source ~/.secrets/cmuxterm.env
 export SPARKLE_PRIVATE_KEY
+if [[ -f "$HOME/.config/secrets/shell.env" ]]; then
+  source "$HOME/.config/secrets/shell.env"
+fi
 for tool in zig xcodebuild create-dmg xcrun codesign ditto gh; do
   command -v "$tool" >/dev/null || { echo "MISSING: $tool" >&2; exit 1; }
 done
+if [[ -z "${SIGNING_BUILD_KEYCHAIN_PATH:-}" || -z "${SIGNING_BUILD_KEYCHAIN_PASSWORD:-}" ]]; then
+  echo "Missing SIGNING_BUILD_KEYCHAIN_* env vars." >&2
+  exit 1
+fi
+security unlock-keychain -p "$SIGNING_BUILD_KEYCHAIN_PASSWORD" "$SIGNING_BUILD_KEYCHAIN_PATH"
 echo "Pre-flight checks passed"
 
 # --- Build GhosttyKit (if needed) ---
@@ -87,19 +97,19 @@ APP_PLIST="$APP_PATH/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Delete :SUPublicEDKey" "$APP_PLIST" 2>/dev/null || true
 /usr/libexec/PlistBuddy -c "Delete :SUFeedURL" "$APP_PLIST" 2>/dev/null || true
 /usr/libexec/PlistBuddy -c "Add :SUPublicEDKey string $SPARKLE_PUBLIC_KEY_DERIVED" "$APP_PLIST"
-/usr/libexec/PlistBuddy -c "Add :SUFeedURL string https://github.com/manaflow-ai/cmux/releases/latest/download/appcast.xml" "$APP_PLIST"
+/usr/libexec/PlistBuddy -c "Add :SUFeedURL string https://github.com/${RELEASE_REPO}/releases/latest/download/appcast.xml" "$APP_PLIST"
 echo "Sparkle keys injected"
 
 # --- Codesign ---
 echo "Codesigning..."
 CLI_PATH="$APP_PATH/Contents/Resources/bin/cmux"
 if [ -f "$CLI_PATH" ]; then
-  /usr/bin/codesign --force --options runtime --timestamp --sign "$SIGN_HASH" --entitlements "$ENTITLEMENTS" "$CLI_PATH"
+  /usr/bin/codesign --force --keychain "$SIGNING_BUILD_KEYCHAIN_PATH" --options runtime --timestamp --sign "$SIGN_HASH" --entitlements "$ENTITLEMENTS" "$CLI_PATH"
 fi
 if [ -f "$HELPER_PATH" ]; then
-  /usr/bin/codesign --force --options runtime --timestamp --sign "$SIGN_HASH" --entitlements "$ENTITLEMENTS" "$HELPER_PATH"
+  /usr/bin/codesign --force --keychain "$SIGNING_BUILD_KEYCHAIN_PATH" --options runtime --timestamp --sign "$SIGN_HASH" --entitlements "$ENTITLEMENTS" "$HELPER_PATH"
 fi
-/usr/bin/codesign --force --options runtime --timestamp --sign "$SIGN_HASH" --entitlements "$ENTITLEMENTS" --deep "$APP_PATH"
+/usr/bin/codesign --force --keychain "$SIGNING_BUILD_KEYCHAIN_PATH" --options runtime --timestamp --sign "$SIGN_HASH" --entitlements "$ENTITLEMENTS" --deep "$APP_PATH"
 /usr/bin/codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 echo "Codesign verified"
 
@@ -107,7 +117,9 @@ echo "Codesign verified"
 echo "Notarizing app..."
 ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" cmux-notary.zip
 xcrun notarytool submit cmux-notary.zip \
-  --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --wait
+  --keychain-profile "$NOTARYTOOL_PROFILE" \
+  --keychain "$SIGNING_BUILD_KEYCHAIN_PATH" \
+  --wait
 xcrun stapler staple "$APP_PATH"
 xcrun stapler validate "$APP_PATH"
 rm -f cmux-notary.zip
@@ -119,7 +131,9 @@ rm -f cmux-macos.dmg
 create-dmg --codesign "$SIGN_HASH" cmux-macos.dmg "$APP_PATH"
 echo "Notarizing DMG..."
 xcrun notarytool submit cmux-macos.dmg \
-  --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --wait
+  --keychain-profile "$NOTARYTOOL_PROFILE" \
+  --keychain "$SIGNING_BUILD_KEYCHAIN_PATH" \
+  --wait
 xcrun stapler staple cmux-macos.dmg
 xcrun stapler validate cmux-macos.dmg
 echo "DMG notarized"
@@ -173,10 +187,10 @@ cask "cmux" do
   version "${VERSION}"
   sha256 "${DMG_SHA256}"
 
-  url "https://github.com/manaflow-ai/cmux/releases/download/v#{version}/cmux-macos.dmg"
+  url "https://github.com/${RELEASE_REPO}/releases/download/v#{version}/cmux-macos.dmg"
   name "cmux"
   desc "Lightweight native macOS terminal with vertical tabs for AI coding agents"
-  homepage "https://github.com/manaflow-ai/cmux"
+  homepage "https://github.com/${RELEASE_REPO}"
 
   livecheck do
     url :url
