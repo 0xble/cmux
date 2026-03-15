@@ -51,6 +51,7 @@ ENTITLEMENTS="cmux.entitlements"
 APP_PATH="build/Build/Products/Release/cmux.app"
 NOTARYTOOL_PROFILE="${NOTARYTOOL_PROFILE:-notarytool-profile}"
 RELEASE_REPO="${RELEASE_REPO:-0xble/cmux}"
+GH_RELEASE_ARGS=(--repo "$RELEASE_REPO")
 
 # --- Pre-flight ---
 source ~/.secrets/cmuxterm.env
@@ -140,15 +141,15 @@ echo "DMG notarized"
 
 # --- Generate Sparkle appcast ---
 echo "Generating appcast..."
-./scripts/sparkle_generate_appcast.sh cmux-macos.dmg "$TAG" appcast.xml
+RELEASE_REPO="$RELEASE_REPO" ./scripts/sparkle_generate_appcast.sh cmux-macos.dmg "$TAG" appcast.xml
 
 # --- Create GitHub release (if needed) and upload ---
-if gh release view "$TAG" >/dev/null 2>&1; then
+if gh release view "${GH_RELEASE_ARGS[@]}" "$TAG" >/dev/null 2>&1; then
   echo "Release $TAG already exists"
-  EXISTING_ASSETS="$(gh release view "$TAG" --json assets --jq '.assets[].name' || true)"
+  EXISTING_ASSETS="$(gh release view "${GH_RELEASE_ARGS[@]}" "$TAG" --json assets --jq '.assets[].name' || true)"
   HAS_CONFLICTING_ASSET="false"
   for asset in cmux-macos.dmg appcast.xml; do
-    if printf '%s\n' "$EXISTING_ASSETS" | grep -Fxq "$asset"; then
+    if printf '%s\n' "$EXISTING_ASSETS" | /usr/bin/grep -Fxq "$asset"; then
       HAS_CONFLICTING_ASSET="true"
       break
     fi
@@ -162,18 +163,18 @@ if gh release view "$TAG" >/dev/null 2>&1; then
 
   if [[ "$ALLOW_OVERWRITE" == "true" ]]; then
     echo "Uploading with overwrite enabled for existing release $TAG..."
-    gh release upload "$TAG" cmux-macos.dmg appcast.xml --clobber
+    gh release upload "${GH_RELEASE_ARGS[@]}" "$TAG" cmux-macos.dmg appcast.xml --clobber
   else
     echo "Uploading to existing release $TAG..."
-    gh release upload "$TAG" cmux-macos.dmg appcast.xml
+    gh release upload "${GH_RELEASE_ARGS[@]}" "$TAG" cmux-macos.dmg appcast.xml
   fi
 else
   echo "Creating release $TAG and uploading..."
-  gh release create "$TAG" cmux-macos.dmg appcast.xml --title "$TAG" --notes "See CHANGELOG.md for details"
+  gh release create "${GH_RELEASE_ARGS[@]}" "$TAG" cmux-macos.dmg appcast.xml --title "$TAG" --notes "See CHANGELOG.md for details"
 fi
 
 # --- Verify ---
-gh release view "$TAG"
+gh release view "${GH_RELEASE_ARGS[@]}" "$TAG"
 
 # --- Update Homebrew cask (skip for nightlies) ---
 if [[ "$TAG" != *"-nightly"* ]]; then

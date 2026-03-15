@@ -16,8 +16,9 @@ if [[ -z "${SPARKLE_PRIVATE_KEY:-}" ]]; then
 fi
 
 SPARKLE_VERSION="${SPARKLE_VERSION:-2.8.1}"
-DOWNLOAD_URL_PREFIX="${DOWNLOAD_URL_PREFIX:-https://github.com/0xble/cmux/releases/download/$TAG/}"
-RELEASE_NOTES_URL="${RELEASE_NOTES_URL:-https://github.com/0xble/cmux/releases/tag/$TAG}"
+RELEASE_REPO="${RELEASE_REPO:-0xble/cmux}"
+DOWNLOAD_URL_PREFIX="${DOWNLOAD_URL_PREFIX:-https://github.com/${RELEASE_REPO}/releases/download/$TAG/}"
+RELEASE_NOTES_URL="${RELEASE_NOTES_URL:-https://github.com/${RELEASE_REPO}/releases/tag/$TAG}"
 
 work_dir="$(mktemp -d)"
 cleanup() {
@@ -94,7 +95,7 @@ fi
 # to sign the DMG and inject the signature. generate_appcast silently skips
 # signing when the public key derived from the private key doesn't match the
 # SUPublicEDKey in the app's Info.plist.
-if ! grep -q 'sparkle:edSignature' "$generated_appcast_path"; then
+if ! /usr/bin/grep -q 'sparkle:edSignature' "$generated_appcast_path"; then
   echo "Warning: generate_appcast did not add edSignature. Using sign_update fallback..."
   SIGNATURE=$("$sign_update" -p --ed-key-file "$key_file" "$DMG_PATH")
   DMG_LENGTH=$(stat -f%z "$DMG_PATH")
@@ -121,7 +122,7 @@ cp "$generated_appcast_path" "$OUT_PATH"
 echo "Generated appcast at $OUT_PATH"
 
 # Verify the appcast has a signature
-if grep -q 'sparkle:edSignature' "$OUT_PATH"; then
+if /usr/bin/grep -q 'sparkle:edSignature' "$OUT_PATH"; then
   echo "Verified: appcast contains sparkle:edSignature"
 else
   echo "ERROR: appcast is missing sparkle:edSignature!" >&2
