@@ -54,11 +54,17 @@ RELEASE_REPO="${RELEASE_REPO:-0xble/cmux}"
 GH_RELEASE_ARGS=(--repo "$RELEASE_REPO")
 
 # --- Pre-flight ---
-source ~/.secrets/cmuxterm.env
-export SPARKLE_PRIVATE_KEY
+if [[ -f "$HOME/.secrets/cmuxterm.env" ]]; then
+  source "$HOME/.secrets/cmuxterm.env"
+fi
 if [[ -f "$HOME/.config/secrets/shell.env" ]]; then
   source "$HOME/.config/secrets/shell.env"
 fi
+if [[ -z "${SPARKLE_PRIVATE_KEY:-}" ]]; then
+  echo "Missing SPARKLE_PRIVATE_KEY." >&2
+  exit 1
+fi
+export SPARKLE_PRIVATE_KEY
 for tool in zig xcodebuild create-dmg xcrun codesign ditto gh; do
   command -v "$tool" >/dev/null || { echo "MISSING: $tool" >&2; exit 1; }
 done
