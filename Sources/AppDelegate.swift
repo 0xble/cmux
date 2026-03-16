@@ -8353,7 +8353,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             dlog("shortcut.action name=toggleWorkspacePin \(debugShortcutRouteSnapshot(event: event))")
 #endif
             return toggleWorkspacePinInActiveMainWindow(
-                preferredWindow: commandPaletteTargetWindow ?? event.window ?? NSApp.keyWindow ?? NSApp.mainWindow
+                preferredWindow: event.window ?? commandPaletteTargetWindow ?? NSApp.keyWindow ?? NSApp.mainWindow
             )
         }
 

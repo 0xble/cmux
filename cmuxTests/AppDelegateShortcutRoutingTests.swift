@@ -1727,8 +1727,29 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
             backing: .buffered,
             defer: false
         )
+        settingsWindow.isReleasedWhenClosed = false
         settingsWindow.identifier = NSUserInterfaceItemIdentifier("cmux.settings")
-        XCTAssertFalse(appDelegate.toggleWorkspacePinInActiveMainWindow(preferredWindow: settingsWindow))
+        settingsWindow.makeKeyAndOrderFront(nil)
+        defer {
+            settingsWindow.orderOut(nil)
+        }
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+
+        guard let event = makeKeyDownEvent(
+            key: "p",
+            modifiers: [.command, .option],
+            keyCode: 35, // kVK_ANSI_P
+            windowNumber: settingsWindow.windowNumber
+        ) else {
+            XCTFail("Failed to construct Cmd+Option+P event for settings window")
+            return
+        }
+
+#if DEBUG
+        XCTAssertFalse(appDelegate.debugHandleCustomShortcut(event: event))
+#else
+        XCTFail("debugHandleCustomShortcut is only available in DEBUG")
+#endif
 
         XCTAssertFalse(workspace.isPinned)
     }
