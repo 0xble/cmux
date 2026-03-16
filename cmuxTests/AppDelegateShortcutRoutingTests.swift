@@ -1793,6 +1793,149 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
         XCTAssertTrue(workspace.isPinned)
     }
 
+    func testToggleWorkspacePinRejectsSettingsPreferredWindow() {
+        guard let appDelegate = AppDelegate.shared else {
+            XCTFail("Expected AppDelegate.shared")
+            return
+        }
+
+        let windowId = appDelegate.createMainWindow()
+        defer {
+            closeWindow(withId: windowId)
+        }
+
+        guard let manager = appDelegate.tabManagerFor(windowId: windowId),
+              let workspace = manager.selectedWorkspace else {
+            XCTFail("Expected main window workspace")
+            return
+        }
+
+        XCTAssertFalse(workspace.isPinned)
+
+        let settingsWindow = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 320),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        settingsWindow.isReleasedWhenClosed = false
+        settingsWindow.identifier = NSUserInterfaceItemIdentifier("cmux.settings")
+        settingsWindow.makeKeyAndOrderFront(nil)
+        defer {
+            settingsWindow.orderOut(nil)
+        }
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+
+        XCTAssertFalse(
+            appDelegate.toggleWorkspacePinInActiveMainWindow(preferredWindow: settingsWindow)
+        )
+        XCTAssertFalse(workspace.isPinned)
+    }
+
+    func testToggleWorkspacePinRejectsCmuxAuxiliaryPreferredWindow() {
+        guard let appDelegate = AppDelegate.shared else {
+            XCTFail("Expected AppDelegate.shared")
+            return
+        }
+
+        let windowId = appDelegate.createMainWindow()
+        defer {
+            closeWindow(withId: windowId)
+        }
+
+        guard let manager = appDelegate.tabManagerFor(windowId: windowId),
+              let workspace = manager.selectedWorkspace else {
+            XCTFail("Expected main window workspace")
+            return
+        }
+
+        XCTAssertFalse(workspace.isPinned)
+
+        let auxiliaryWindow = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 320),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        auxiliaryWindow.isReleasedWhenClosed = false
+        auxiliaryWindow.identifier = NSUserInterfaceItemIdentifier("cmux.about")
+        auxiliaryWindow.makeKeyAndOrderFront(nil)
+        defer {
+            auxiliaryWindow.orderOut(nil)
+        }
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+
+        XCTAssertFalse(
+            appDelegate.toggleWorkspacePinInActiveMainWindow(preferredWindow: auxiliaryWindow)
+        )
+        XCTAssertFalse(workspace.isPinned)
+    }
+
+    func testToggleWorkspacePinFallsBackToMainWindowWhenPreferredWindowIsAuxiliary() {
+        guard let appDelegate = AppDelegate.shared else {
+            XCTFail("Expected AppDelegate.shared")
+            return
+        }
+
+        let windowId = appDelegate.createMainWindow()
+        defer {
+            closeWindow(withId: windowId)
+        }
+
+        guard let manager = appDelegate.tabManagerFor(windowId: windowId),
+              let workspace = manager.selectedWorkspace else {
+            XCTFail("Expected main window workspace")
+            return
+        }
+
+        XCTAssertFalse(workspace.isPinned)
+
+        let auxiliaryWindow = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 320),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+
+        XCTAssertTrue(
+            appDelegate.toggleWorkspacePinInActiveMainWindow(preferredWindow: auxiliaryWindow)
+        )
+        XCTAssertTrue(workspace.isPinned)
+    }
+
+    func testToggleWorkspacePinUsesResolvedMainWindowContextWhenObjectKeyLookupMisses() {
+        guard let appDelegate = AppDelegate.shared else {
+            XCTFail("Expected AppDelegate.shared")
+            return
+        }
+
+        let windowId = appDelegate.createMainWindow()
+        defer {
+            closeWindow(withId: windowId)
+        }
+
+        guard let manager = appDelegate.tabManagerFor(windowId: windowId),
+              let window = window(withId: windowId),
+              let workspace = manager.selectedWorkspace else {
+            XCTFail("Expected main window workspace")
+            return
+        }
+
+        XCTAssertFalse(workspace.isPinned)
+        window.makeKeyAndOrderFront(nil)
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+
+#if DEBUG
+        XCTAssertTrue(appDelegate.debugInjectWindowContextKeyMismatch(windowId: windowId))
+#else
+        XCTFail("debugInjectWindowContextKeyMismatch is only available in DEBUG")
+#endif
+
+        XCTAssertTrue(appDelegate.isMainTerminalWindowForCommands(window))
+        XCTAssertTrue(appDelegate.toggleWorkspacePinInActiveMainWindow(preferredWindow: window))
+        XCTAssertTrue(workspace.isPinned)
+    }
+
     func testEscapeDismissesVisibleCommandPaletteAndIsConsumed() {
         guard let appDelegate = AppDelegate.shared else {
             XCTFail("Expected AppDelegate.shared")

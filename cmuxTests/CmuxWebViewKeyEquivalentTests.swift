@@ -1689,7 +1689,7 @@ final class WorkspaceRenameShortcutDefaultsTests: XCTestCase {
 
     func testToggleWorkspacePinShortcutConvertsToMenuShortcut() {
         let shortcut = KeyboardShortcutSettings.Action.toggleWorkspacePin.defaultShortcut
-        XCTAssertNotNil(shortcut.keyEquivalent)
+        XCTAssertEqual(shortcut.menuItemKeyEquivalent, "p")
         XCTAssertTrue(shortcut.eventModifiers.contains(.command))
         XCTAssertFalse(shortcut.eventModifiers.contains(.shift))
         XCTAssertTrue(shortcut.eventModifiers.contains(.option))

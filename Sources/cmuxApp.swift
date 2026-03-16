@@ -600,14 +600,21 @@ struct cmuxApp: App {
                     _ = AppDelegate.shared?.requestRenameWorkspaceViaCommandPalette()
                 }
 
+                let isNonMainWindowFocused: Bool = {
+                    guard let keyWindow = NSApp.keyWindow else { return false }
+                    return AppDelegate.shared?.isMainTerminalWindowForCommands(keyWindow) != true
+                }()
                 splitCommandButton(
-                    title: activeTabManager.selectedWorkspace?.isPinned == true
+                    title: !isNonMainWindowFocused && activeTabManager.selectedWorkspace?.isPinned == true
                         ? String(localized: "contextMenu.unpinWorkspace", defaultValue: "Unpin Workspace")
                         : String(localized: "contextMenu.pinWorkspace", defaultValue: "Pin Workspace"),
                     shortcut: toggleWorkspacePinMenuShortcut
                 ) {
-                    _ = AppDelegate.shared?.toggleWorkspacePinInActiveMainWindow()
+                    _ = AppDelegate.shared?.toggleWorkspacePinInActiveMainWindow(
+                        preferredWindow: NSApp.keyWindow
+                    )
                 }
+                .disabled(isNonMainWindowFocused)
 
                 Divider()
 

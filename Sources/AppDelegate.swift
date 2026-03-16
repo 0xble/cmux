@@ -4847,8 +4847,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     private func contextForMainWindow(_ window: NSWindow?) -> MainWindowContext? {
-        guard let window, isMainTerminalWindow(window) else { return nil }
-        return mainWindowContexts[ObjectIdentifier(window)]
+        guard let window else { return nil }
+        return contextForMainTerminalWindow(window)
+    }
+
+    private func isVisibleNonMainWindow(_ window: NSWindow?) -> Bool {
+        guard let window else { return false }
+        guard contextForMainWindow(window) == nil else { return false }
+        return window.isVisible
     }
 
 #if DEBUG
@@ -9321,10 +9327,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         return true
     }
 
+    func isMainTerminalWindowForCommands(_ window: NSWindow?) -> Bool {
+        guard let window else { return false }
+        return isMainTerminalWindow(window)
+    }
+
     @discardableResult
     func toggleWorkspacePinInActiveMainWindow(preferredWindow: NSWindow? = nil) -> Bool {
-        if let preferredWindow,
-           contextForMainWindow(preferredWindow) == nil {
+        if isVisibleNonMainWindow(preferredWindow) {
             NSSound.beep()
             return false
         }
