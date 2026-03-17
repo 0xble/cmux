@@ -2052,8 +2052,8 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
         firstManager.selectWorkspace(alternateWorkspace)
         appDelegate.tabManager = secondManager
         XCTAssertTrue(appDelegate.tabManager === secondManager)
-        XCTAssertTrue(appDelegate.workspaceForWorkspacePin(from: popupWindow) === firstWorkspace)
-        XCTAssertTrue(appDelegate.canPinWorkspace(from: popupWindow))
+        XCTAssertNil(appDelegate.workspaceForWorkspacePin(from: popupWindow))
+        XCTAssertFalse(appDelegate.canPinWorkspace(from: popupWindow))
         XCTAssertTrue(appDelegate.toggleWorkspacePinInActiveMainWindow(preferredWindow: popupWindow))
         XCTAssertTrue(firstWorkspace.isPinned)
         XCTAssertFalse(alternateWorkspace.isPinned)
