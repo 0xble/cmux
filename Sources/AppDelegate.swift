@@ -5475,6 +5475,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         return true
     }
 
+    private func eventWindowForWorkspacePinShortcut(_ event: NSEvent) -> NSWindow? {
+        event.window ?? NSApp.window(withWindowNumber: event.windowNumber)
+    }
+
+    private func canHandleWorkspacePinWithoutSynchronizedContext(event: NSEvent) -> Bool {
+        guard matchShortcut(event: event, shortcut: KeyboardShortcutSettings.shortcut(for: .toggleWorkspacePin)) else {
+            return false
+        }
+        return canPinWorkspace(from: eventWindowForWorkspacePinShortcut(event))
+    }
+
+    private func preferredWindowForWorkspacePinShortcut(
+        event: NSEvent,
+        commandPaletteTargetWindow: NSWindow?
+    ) -> NSWindow? {
+        let eventWindow = eventWindowForWorkspacePinShortcut(event)
+        if let eventWindow,
+           canPinWorkspace(from: eventWindow) {
+            return eventWindow
+        }
+        return commandPaletteTargetWindow ?? eventWindow ?? NSApp.keyWindow ?? NSApp.mainWindow
+    }
+
     @discardableResult
     func createMainWindow(
         initialWorkingDirectory: String? = nil,
@@ -8200,7 +8223,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
         let hasEventWindowContext = shortcutEventHasAddressableWindow(event)
         let didSynchronizeShortcutContext = synchronizeShortcutRoutingContext(event: event)
-        if hasEventWindowContext && !didSynchronizeShortcutContext {
+        if hasEventWindowContext
+            && !didSynchronizeShortcutContext
+            && !canHandleWorkspacePinWithoutSynchronizedContext(event: event) {
 #if DEBUG
             dlog("handleCustomShortcut: unresolved event window context; bypassing app shortcut handling")
 #endif
@@ -8394,7 +8419,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             dlog("shortcut.action name=toggleWorkspacePin \(debugShortcutRouteSnapshot(event: event))")
 #endif
             return toggleWorkspacePinInActiveMainWindow(
-                preferredWindow: event.window ?? commandPaletteTargetWindow ?? NSApp.keyWindow ?? NSApp.mainWindow
+                preferredWindow: preferredWindowForWorkspacePinShortcut(
+                    event: event,
+                    commandPaletteTargetWindow: commandPaletteTargetWindow
+                )
             )
         }
 
