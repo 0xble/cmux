@@ -4851,10 +4851,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         return contextForMainTerminalWindow(window)
     }
 
-    private func isVisibleNonMainWindow(_ window: NSWindow?) -> Bool {
+    private func resolvedWorkspacePinTarget(
+        for window: NSWindow?
+    ) -> (context: MainWindowContext, workspace: Workspace)? {
+        if let context = contextForMainWindow(window),
+           let workspace = context.tabManager.selectedWorkspace {
+            return (context, workspace)
+        }
+        guard let workspaceId = BrowserPopupWindowController.openerWorkspaceId(for: window),
+              let context = contextContainingTabId(workspaceId),
+              let workspace = context.tabManager.tabs.first(where: { $0.id == workspaceId }) else {
+            return nil
+        }
+        return (context, workspace)
+    }
+
+    func canPinWorkspace(from window: NSWindow?) -> Bool {
+        resolvedWorkspacePinTarget(for: window) != nil
+    }
+
+    func workspaceForWorkspacePin(from window: NSWindow?) -> Workspace? {
+        resolvedWorkspacePinTarget(for: window)?.workspace
+    }
+
+    private func isVisibleUnsupportedWorkspacePinWindow(_ window: NSWindow?) -> Bool {
         guard let window else { return false }
-        guard contextForMainWindow(window) == nil else { return false }
+        guard !canPinWorkspace(from: window) else { return false }
         return window.isVisible
+    }
+
+    private func activateMainWindowContext(_ context: MainWindowContext) -> TabManager {
+        if let window = context.window ?? windowForMainWindowId(context.windowId) {
+            setActiveMainWindow(window)
+        } else {
+            tabManager = context.tabManager
+            sidebarState = context.sidebarState
+            sidebarSelectionState = context.sidebarSelectionState
+            TerminalController.shared.setActiveTabManager(context.tabManager)
+        }
+        return context.tabManager
     }
 
 #if DEBUG
@@ -9327,26 +9362,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         return true
     }
 
-    func isMainTerminalWindowForCommands(_ window: NSWindow?) -> Bool {
-        guard let window else { return false }
-        return isMainTerminalWindow(window)
-    }
-
     @discardableResult
     func toggleWorkspacePinInActiveMainWindow(preferredWindow: NSWindow? = nil) -> Bool {
-        if isVisibleNonMainWindow(preferredWindow) {
+        if isVisibleUnsupportedWorkspacePinWindow(preferredWindow) {
             NSSound.beep()
             return false
         }
 
-        let targetWindow = preferredWindow ?? NSApp.keyWindow ?? NSApp.mainWindow
-        guard let manager = synchronizeActiveMainWindowContext(preferredWindow: targetWindow) else {
-            NSSound.beep()
-            return false
-        }
-        guard let workspace = manager.selectedWorkspace else {
-            NSSound.beep()
-            return false
+        let manager: TabManager
+        let workspace: Workspace
+        if let preferredWindow,
+           preferredWindow.isVisible {
+            guard let target = resolvedWorkspacePinTarget(for: preferredWindow) else {
+                NSSound.beep()
+                return false
+            }
+            manager = activateMainWindowContext(target.context)
+            workspace = target.workspace
+        } else {
+            let targetWindow = preferredWindow ?? NSApp.keyWindow ?? NSApp.mainWindow
+            guard let synchronizedManager = synchronizeActiveMainWindowContext(
+                preferredWindow: targetWindow
+            ) else {
+                NSSound.beep()
+                return false
+            }
+            manager = synchronizedManager
+            guard let selectedWorkspace = manager.selectedWorkspace else {
+                NSSound.beep()
+                return false
+            }
+            workspace = selectedWorkspace
         }
 
         manager.setPinned(workspace, pinned: !workspace.isPinned)

@@ -1,4 +1,5 @@
 import XCTest
+import WebKit
 
 #if canImport(cmux_DEV)
 @testable import cmux_DEV
@@ -1931,9 +1932,68 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
         XCTFail("debugInjectWindowContextKeyMismatch is only available in DEBUG")
 #endif
 
-        XCTAssertTrue(appDelegate.isMainTerminalWindowForCommands(window))
+        XCTAssertTrue(appDelegate.canPinWorkspace(from: window))
         XCTAssertTrue(appDelegate.toggleWorkspacePinInActiveMainWindow(preferredWindow: window))
         XCTAssertTrue(workspace.isPinned)
+    }
+
+    func testToggleWorkspacePinUsesPopupOpenerWorkspaceContext() {
+        guard let appDelegate = AppDelegate.shared else {
+            XCTFail("Expected AppDelegate.shared")
+            return
+        }
+
+        let firstWindowId = appDelegate.createMainWindow()
+        let secondWindowId = appDelegate.createMainWindow()
+        defer {
+            closeWindow(withId: firstWindowId)
+            closeWindow(withId: secondWindowId)
+        }
+
+        guard let firstManager = appDelegate.tabManagerFor(windowId: firstWindowId),
+              let secondManager = appDelegate.tabManagerFor(windowId: secondWindowId),
+              let firstWindow = window(withId: firstWindowId),
+              let firstWorkspace = firstManager.selectedWorkspace,
+              let secondWorkspace = secondManager.selectedWorkspace else {
+            XCTFail("Expected both main window workspaces")
+            return
+        }
+
+        let alternateWorkspace = firstManager.addWorkspace()
+        firstManager.selectWorkspace(firstWorkspace)
+        XCTAssertFalse(firstWorkspace.isPinned)
+        XCTAssertFalse(alternateWorkspace.isPinned)
+        XCTAssertFalse(secondWorkspace.isPinned)
+        firstWindow.makeKeyAndOrderFront(nil)
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+
+        let openerPanel = BrowserPanel(workspaceId: firstWorkspace.id)
+        let popupController = BrowserPopupWindowController(
+            configuration: WKWebViewConfiguration(),
+            windowFeatures: WKWindowFeatures(),
+            openerPanel: openerPanel
+        )
+        guard let popupWindow = popupController.webView.window else {
+            XCTFail("Expected popup window")
+            return
+        }
+        popupWindow.makeKeyAndOrderFront(nil)
+        defer {
+            popupController.closePopup()
+            openerPanel.close()
+            popupWindow.orderOut(nil)
+        }
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+
+        firstManager.selectWorkspace(alternateWorkspace)
+        appDelegate.tabManager = secondManager
+        XCTAssertTrue(appDelegate.tabManager === secondManager)
+        XCTAssertTrue(appDelegate.workspaceForWorkspacePin(from: popupWindow) === firstWorkspace)
+        XCTAssertTrue(appDelegate.canPinWorkspace(from: popupWindow))
+        XCTAssertTrue(appDelegate.toggleWorkspacePinInActiveMainWindow(preferredWindow: popupWindow))
+        XCTAssertTrue(firstWorkspace.isPinned)
+        XCTAssertFalse(alternateWorkspace.isPinned)
+        XCTAssertFalse(secondWorkspace.isPinned)
     }
 
     func testEscapeDismissesVisibleCommandPaletteAndIsConsumed() {
