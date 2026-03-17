@@ -11938,6 +11938,29 @@ final class SidebarTrailingAccessoryWidthPolicyTests: XCTestCase {
 
         XCTAssertEqual(width, 0)
     }
+
+    func testFallsBackToCloseWidthWhenHintIsVisibleButLabelIsNil() {
+        let width = SidebarTrailingAccessoryWidthPolicy.width(
+            canCloseWorkspace: true,
+            showsWorkspaceShortcutHint: true,
+            workspaceShortcutLabel: nil,
+            debugXOffset: 0
+        )
+
+        XCTAssertEqual(width, SidebarTrailingAccessoryWidthPolicy.closeButtonWidth)
+    }
+
+    func testUsesHintWidthWhenHintIsVisibleEvenIfCannotClose() {
+        let width = SidebarTrailingAccessoryWidthPolicy.width(
+            canCloseWorkspace: false,
+            showsWorkspaceShortcutHint: true,
+            workspaceShortcutLabel: "⌘1",
+            debugXOffset: 0
+        )
+
+        XCTAssertGreaterThan(width, 0)
+        XCTAssertGreaterThan(width, SidebarTrailingAccessoryWidthPolicy.closeButtonWidth)
+    }
 }
 
 @MainActor
