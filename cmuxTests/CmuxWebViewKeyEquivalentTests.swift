@@ -11905,6 +11905,42 @@ final class SidebarWorkspaceShortcutHintMetricsTests: XCTestCase {
 #endif
 
 @MainActor
+final class SidebarTrailingAccessoryWidthPolicyTests: XCTestCase {
+    func testUsesCloseButtonWidthWhenHintIsHidden() {
+        let width = SidebarTrailingAccessoryWidthPolicy.width(
+            canCloseWorkspace: true,
+            showsWorkspaceShortcutHint: false,
+            workspaceShortcutLabel: "⌘1",
+            debugXOffset: 0
+        )
+
+        XCTAssertEqual(width, SidebarTrailingAccessoryWidthPolicy.closeButtonWidth)
+    }
+
+    func testUsesHintWidthWhenHintIsVisible() {
+        let width = SidebarTrailingAccessoryWidthPolicy.width(
+            canCloseWorkspace: true,
+            showsWorkspaceShortcutHint: true,
+            workspaceShortcutLabel: "⌘1",
+            debugXOffset: 0
+        )
+
+        XCTAssertGreaterThan(width, SidebarTrailingAccessoryWidthPolicy.closeButtonWidth)
+    }
+
+    func testUsesZeroWidthWhenWorkspaceCannotCloseAndHintIsHidden() {
+        let width = SidebarTrailingAccessoryWidthPolicy.width(
+            canCloseWorkspace: false,
+            showsWorkspaceShortcutHint: false,
+            workspaceShortcutLabel: nil,
+            debugXOffset: 0
+        )
+
+        XCTAssertEqual(width, 0)
+    }
+}
+
+@MainActor
 final class DraggableFolderHitTests: XCTestCase {
     func testFolderHitTestReturnsContainerWhenInsideBounds() {
         let folderView = DraggableFolderNSView(directory: "/tmp")
