@@ -1,3 +1,3 @@
 #!/bin/sh
 echo "manual: build via Xcode"
-echo "open ~/Repos/cmux/cmux.xcodeproj and archive"
+echo "open ~/Repos/cmux/GhosttyTabs.xcodeproj and archive"
