@@ -1,3 +1,61 @@
-#!/bin/sh
-echo "manual: build via Xcode"
-echo "open ~/Repos/cmux/GhosttyTabs.xcodeproj and archive"
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+SIGN_ID="Developer ID Application: Brian Le (MWNX6V232Y)"
+BUILD_KC="$HOME/Library/Keychains/build.keychain-db"
+APP_NAME="cmux.app"
+INSTALL_PATH="/Applications/$APP_NAME"
+
+cd "$REPO"
+
+echo "==> Unlocking build keychain"
+security unlock-keychain -p "" "$BUILD_KC"
+
+echo "==> Building Release with Developer ID signing"
+xcodebuild \
+  -project GhosttyTabs.xcodeproj \
+  -scheme cmux \
+  -configuration Release \
+  -destination 'platform=macOS' \
+  CODE_SIGN_IDENTITY="$SIGN_ID" \
+  CODE_SIGN_STYLE=Manual \
+  "OTHER_CODE_SIGN_FLAGS=--options=runtime --keychain=$BUILD_KC" \
+  build
+
+BUILD_APP="$(
+  find "$HOME/Library/Developer/Xcode/DerivedData" \
+    -path "*/Build/Products/Release/$APP_NAME" -print0 \
+  | xargs -0 /usr/bin/stat -f "%m %N" 2>/dev/null \
+  | sort -nr \
+  | head -n 1 \
+  | cut -d' ' -f2-
+)"
+
+if [[ -z "$BUILD_APP" ]]; then
+  echo "ERROR: $APP_NAME not found in DerivedData" >&2
+  exit 1
+fi
+
+echo "==> Verifying signature"
+codesign --verify --deep --strict "$BUILD_APP"
+codesign -dv "$BUILD_APP" 2>&1 | grep 'TeamIdentifier='
+
+echo "==> Installing to $INSTALL_PATH"
+pkill -x cmux || true
+sleep 1
+trash "$INSTALL_PATH" 2>/dev/null || true
+cp -R "$BUILD_APP" "$INSTALL_PATH"
+codesign --verify --deep --strict "$INSTALL_PATH"
+
+echo "==> Launching"
+env -u GIT_PAGER -u GH_PAGER open -g "$INSTALL_PATH"
+sleep 2
+"$INSTALL_PATH/Contents/Resources/bin/cmux" --version
+
+echo "==> Deploying to MacBook (unchanged, via tar)"
+ssh macbook 'osascript -e "tell application \"cmux\" to quit" 2>/dev/null; sleep 2; pkill -x cmux 2>/dev/null; sleep 1; trash /Applications/cmux.app 2>/dev/null || true'
+(cd /Applications && tar cf - "$APP_NAME") | ssh macbook 'cd /Applications && tar xf -'
+ssh macbook 'codesign --verify --deep --strict /Applications/cmux.app && open -g /Applications/cmux.app && sleep 2 && /Applications/cmux.app/Contents/Resources/bin/cmux --version'
+
+echo "==> Done"
