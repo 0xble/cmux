@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+
+app_path="/Applications/cmux.app"
+bin_path="$app_path/Contents/Resources/bin/cmux"
+
+[ -d "$app_path" ]
+[ -x "$bin_path" ]
+codesign --verify --deep --strict "$app_path"
+"$bin_path" --version | /usr/bin/grep -Fq '0xble'
+
+echo "smoke ok: cmux"
