@@ -752,14 +752,14 @@ struct cmuxApp: App {
                 performSplitFromMenu(direction: .down)
             }
 
-splitCommandButton(
-                title: activeTabManager.selectedWorkspace?.isPinned == true
-                    ? String(localized: "contextMenu.unpinWorkspace", defaultValue: "Unpin Workspace")
-                    : String(localized: "contextMenu.pinWorkspace", defaultValue: "Pin Workspace"),
-                shortcut: menuShortcut(for: .toggleWorkspacePin)
-            ) {
-                _ = AppDelegate.shared?.toggleWorkspacePinInActiveMainWindow()
-            }
+                splitCommandButton(
+                    title: activeTabManager.selectedWorkspace?.isPinned == true
+                        ? String(localized: "contextMenu.unpinWorkspace", defaultValue: "Unpin Workspace")
+                        : String(localized: "contextMenu.pinWorkspace", defaultValue: "Pin Workspace"),
+                    shortcut: menuShortcut(for: .toggleWorkspacePin)
+                ) {
+                    _ = AppDelegate.shared?.toggleWorkspacePinInActiveMainWindow()
+                }
 
             Divider()
 
@@ -857,20 +857,14 @@ splitCommandButton(
 
     func menuShortcut(for action: KeyboardShortcutSettings.Action) -> StoredShortcut {
         let _ = keyboardShortcutSettingsObserver.revision
-splitCommandButton(
-                title: activeTabManager.selectedWorkspace?.isPinned == true
-                    ? String(localized: "contextMenu.unpinWorkspace", defaultValue: "Unpin Workspace")
-                    : String(localized: "contextMenu.pinWorkspace", defaultValue: "Pin Workspace"),
-                shortcut: menuShortcut(for: .toggleWorkspacePin)
-            ) {
-                _ = AppDelegate.shared?.toggleWorkspacePinInActiveMainWindow()
-            }
-
-            Divider()
-
-            splitCommandButton(title: String(localized: "menu.view.splitBrowserRight", defaultValue: "Split Browser Right"), shortcut: menuShortcut(for: .splitBrowserRight)) {
-                performBrowserSplitFromMenu(direction: .right)
-            }
+                splitCommandButton(
+                    title: activeTabManager.selectedWorkspace?.isPinned == true
+                        ? String(localized: "contextMenu.unpinWorkspace", defaultValue: "Unpin Workspace")
+                        : String(localized: "contextMenu.pinWorkspace", defaultValue: "Pin Workspace"),
+                    shortcut: menuShortcut(for: .toggleWorkspacePin)
+                ) {
+                    _ = AppDelegate.shared?.toggleWorkspacePinInActiveMainWindow()
+                }
     }
 
     private var notificationMenuSnapshot: NotificationMenuSnapshot {

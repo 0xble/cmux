@@ -3,7 +3,7 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 SIGN_ID="Developer ID Application: Brian Le (MWNX6V232Y)"
-BUILD_KC="$HOME/Library/Keychains/build.keychain-db"
+BUILD_KC_DEFAULT="$HOME/Library/Keychains/build.keychain-db"
 APP_NAME="cmux.app"
 INSTALL_PATH="/Applications/$APP_NAME"
 DERIVED_DATA_PATH="$REPO/build"
@@ -11,8 +11,23 @@ BUILD_APP="$DERIVED_DATA_PATH/Build/Products/Release/$APP_NAME"
 
 cd "$REPO"
 
+if [[ -f "$HOME/.config/secrets/local.env" ]]; then
+  source "$HOME/.config/secrets/local.env"
+fi
+if [[ -f "$HOME/.config/secrets/shell.env" ]]; then
+  source "$HOME/.config/secrets/shell.env"
+fi
+
+BUILD_KC="${SIGNING_BUILD_KEYCHAIN_PATH:-$BUILD_KC_DEFAULT}"
+BUILD_KC_PASSWORD="${SIGNING_BUILD_KEYCHAIN_PASSWORD:-}"
+
+if [[ -z "$BUILD_KC_PASSWORD" ]]; then
+  echo "ERROR: SIGNING_BUILD_KEYCHAIN_PASSWORD is not set" >&2
+  exit 1
+fi
+
 echo "==> Unlocking build keychain"
-security unlock-keychain -p "" "$BUILD_KC"
+security unlock-keychain -p "$BUILD_KC_PASSWORD" "$BUILD_KC"
 
 echo "==> Building Release with Developer ID signing"
 trash "$DERIVED_DATA_PATH" 2>/dev/null || true
