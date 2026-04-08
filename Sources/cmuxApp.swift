@@ -780,7 +780,7 @@ struct cmuxApp: App {
                     title: activeTabManager.selectedWorkspace?.isPinned == true
                         ? String(localized: "contextMenu.unpinWorkspace", defaultValue: "Unpin Workspace")
                         : String(localized: "contextMenu.pinWorkspace", defaultValue: "Pin Workspace"),
-                    shortcut: toggleWorkspacePinMenuShortcut
+                    shortcut: menuShortcut(for: .toggleWorkspacePin)
                 ) {
                     _ = AppDelegate.shared?.toggleWorkspacePinInActiveMainWindow()
                 }
@@ -887,99 +887,6 @@ struct cmuxApp: App {
     private func menuShortcut(for action: KeyboardShortcutSettings.Action) -> StoredShortcut {
         let _ = keyboardShortcutSettingsObserver.revision
         return KeyboardShortcutSettings.shortcut(for: action)
-    }
-
-    private var openFolderMenuShortcut: StoredShortcut {
-        decodeShortcut(from: openFolderShortcutData, fallback: KeyboardShortcutSettings.Action.openFolder.defaultShortcut)
-    }
-
-    private var showNotificationsMenuShortcut: StoredShortcut {
-        decodeShortcut(
-            from: showNotificationsShortcutData,
-            fallback: KeyboardShortcutSettings.Action.showNotifications.defaultShortcut
-        )
-    }
-
-    private var jumpToUnreadMenuShortcut: StoredShortcut {
-        decodeShortcut(
-            from: jumpToUnreadShortcutData,
-            fallback: KeyboardShortcutSettings.Action.jumpToUnread.defaultShortcut
-        )
-    }
-
-    private var nextSurfaceMenuShortcut: StoredShortcut {
-        decodeShortcut(from: nextSurfaceShortcutData, fallback: KeyboardShortcutSettings.Action.nextSurface.defaultShortcut)
-    }
-
-    private var prevSurfaceMenuShortcut: StoredShortcut {
-        decodeShortcut(from: prevSurfaceShortcutData, fallback: KeyboardShortcutSettings.Action.prevSurface.defaultShortcut)
-    }
-
-    private var nextWorkspaceMenuShortcut: StoredShortcut {
-        decodeShortcut(
-            from: nextWorkspaceShortcutData,
-            fallback: KeyboardShortcutSettings.Action.nextSidebarTab.defaultShortcut
-        )
-    }
-
-    private var prevWorkspaceMenuShortcut: StoredShortcut {
-        decodeShortcut(
-            from: prevWorkspaceShortcutData,
-            fallback: KeyboardShortcutSettings.Action.prevSidebarTab.defaultShortcut
-        )
-    }
-
-    private var splitDownMenuShortcut: StoredShortcut {
-        decodeShortcut(from: splitDownShortcutData, fallback: KeyboardShortcutSettings.Action.splitDown.defaultShortcut)
-    }
-
-    private var toggleBrowserDeveloperToolsMenuShortcut: StoredShortcut {
-        decodeShortcut(
-            from: toggleBrowserDeveloperToolsShortcutData,
-            fallback: KeyboardShortcutSettings.Action.toggleBrowserDeveloperTools.defaultShortcut
-        )
-    }
-
-    private var showBrowserJavaScriptConsoleMenuShortcut: StoredShortcut {
-        decodeShortcut(
-            from: showBrowserJavaScriptConsoleShortcutData,
-            fallback: KeyboardShortcutSettings.Action.showBrowserJavaScriptConsole.defaultShortcut
-        )
-    }
-
-    private var splitBrowserRightMenuShortcut: StoredShortcut {
-        decodeShortcut(
-            from: splitBrowserRightShortcutData,
-            fallback: KeyboardShortcutSettings.Action.splitBrowserRight.defaultShortcut
-        )
-    }
-
-    private var splitBrowserDownMenuShortcut: StoredShortcut {
-        decodeShortcut(
-            from: splitBrowserDownShortcutData,
-            fallback: KeyboardShortcutSettings.Action.splitBrowserDown.defaultShortcut
-        )
-    }
-
-    private var renameWorkspaceMenuShortcut: StoredShortcut {
-        decodeShortcut(
-            from: renameWorkspaceShortcutData,
-            fallback: KeyboardShortcutSettings.Action.renameWorkspace.defaultShortcut
-        )
-    }
-
-    private var toggleWorkspacePinMenuShortcut: StoredShortcut {
-        decodeShortcut(
-            from: toggleWorkspacePinShortcutData,
-            fallback: KeyboardShortcutSettings.Action.toggleWorkspacePin.defaultShortcut
-        )
-    }
-
-    private var closeWorkspaceMenuShortcut: StoredShortcut {
-        decodeShortcut(
-            from: closeWorkspaceShortcutData,
-            fallback: KeyboardShortcutSettings.Action.closeWorkspace.defaultShortcut
-        )
     }
 
     private var notificationMenuSnapshot: NotificationMenuSnapshot {
