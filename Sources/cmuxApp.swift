@@ -760,6 +760,7 @@ struct cmuxApp: App {
                 ) {
                     _ = AppDelegate.shared?.toggleWorkspacePinInActiveMainWindow()
                 }
+                .disabled(activeTabManager.selectedWorkspace == nil)
 
             Divider()
 
