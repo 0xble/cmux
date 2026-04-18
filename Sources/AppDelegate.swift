@@ -9410,15 +9410,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         if preferredWindow == nil,
            let candidate = requestedWindow,
            candidate.isVisible,
-           !canPinWorkspace(from: candidate, includingPopups: true) {
+           resolvedWorkspacePinTargetIncludingPopups(for: candidate) == nil {
             targetWindow = NSApp.mainWindow
         } else {
             targetWindow = requestedWindow
-        }
-        if let targetWindow,
-           targetWindow.isVisible,
-           !canPinWorkspace(from: targetWindow, includingPopups: true) {
-            return nil
         }
 
         if let targetWindow, targetWindow.isVisible {
