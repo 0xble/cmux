@@ -4875,22 +4875,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         return (context, workspace)
     }
 
-    func canPinWorkspace(from window: NSWindow?) -> Bool {
-        resolvedWorkspacePinTargetForMainWindow(for: window) != nil
-    }
-
-    func workspaceForWorkspacePin(from window: NSWindow?) -> Workspace? {
-        resolvedWorkspacePinTargetForMainWindow(for: window)?.workspace
-    }
-
-    private func canToggleWorkspacePin(from window: NSWindow?) -> Bool {
-        resolvedWorkspacePinTargetIncludingPopups(for: window) != nil
-    }
-
-    private func isVisibleUnsupportedWorkspacePinWindow(_ window: NSWindow?) -> Bool {
-        guard let window else { return false }
-        guard !canToggleWorkspacePin(from: window) else { return false }
-        return window.isVisible
+    func canPinWorkspace(from window: NSWindow?, includingPopups: Bool = false) -> Bool {
+        if includingPopups {
+            return resolvedWorkspacePinTargetIncludingPopups(for: window) != nil
+        }
+        return resolvedWorkspacePinTargetForMainWindow(for: window) != nil
     }
 
     private func activateMainWindowContext(_ context: MainWindowContext) -> TabManager {
@@ -5496,7 +5485,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         guard matchShortcut(event: event, shortcut: KeyboardShortcutSettings.shortcut(for: .toggleWorkspacePin)) else {
             return false
         }
-        return canToggleWorkspacePin(from: eventWindowForWorkspacePinShortcut(event))
+        return canPinWorkspace(from: eventWindowForWorkspacePinShortcut(event), includingPopups: true)
     }
 
     private func preferredWindowForWorkspacePinShortcut(
@@ -5505,7 +5494,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     ) -> NSWindow? {
         let eventWindow = eventWindowForWorkspacePinShortcut(event)
         if let eventWindow,
-           canToggleWorkspacePin(from: eventWindow) {
+           canPinWorkspace(from: eventWindow, includingPopups: true) {
             return eventWindow
         }
         return commandPaletteTargetWindow ?? eventWindow ?? NSApp.keyWindow ?? NSApp.mainWindow
@@ -9405,46 +9394,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     @discardableResult
     func toggleWorkspacePinInActiveMainWindow(preferredWindow: NSWindow? = nil) -> Bool {
+        guard let target = resolveWorkspacePinTarget(preferredWindow: preferredWindow) else {
+            NSSound.beep()
+            return false
+        }
+        target.manager.togglePin(tabId: target.workspace.id)
+        return true
+    }
+
+    private func resolveWorkspacePinTarget(
+        preferredWindow: NSWindow?
+    ) -> (manager: TabManager, workspace: Workspace)? {
         let requestedWindow = preferredWindow ?? NSApp.keyWindow ?? NSApp.mainWindow
         let targetWindow: NSWindow?
         if preferredWindow == nil,
-           isVisibleUnsupportedWorkspacePinWindow(requestedWindow) {
+           let candidate = requestedWindow,
+           candidate.isVisible,
+           !canPinWorkspace(from: candidate, includingPopups: true) {
             targetWindow = NSApp.mainWindow
         } else {
             targetWindow = requestedWindow
         }
-        if isVisibleUnsupportedWorkspacePinWindow(targetWindow) {
-            NSSound.beep()
-            return false
-        }
-
-        let manager: TabManager
-        let workspace: Workspace
         if let targetWindow,
-           targetWindow.isVisible {
-            guard let target = resolvedWorkspacePinTargetIncludingPopups(for: targetWindow) else {
-                NSSound.beep()
-                return false
-            }
-            manager = activateMainWindowContext(target.context)
-            workspace = target.workspace
-        } else {
-            guard let synchronizedManager = synchronizeActiveMainWindowContext(
-                preferredWindow: targetWindow
-            ) else {
-                NSSound.beep()
-                return false
-            }
-            manager = synchronizedManager
-            guard let selectedWorkspace = manager.selectedWorkspace else {
-                NSSound.beep()
-                return false
-            }
-            workspace = selectedWorkspace
+           targetWindow.isVisible,
+           !canPinWorkspace(from: targetWindow, includingPopups: true) {
+            return nil
         }
 
-        manager.setPinned(workspace, pinned: !workspace.isPinned)
-        return true
+        if let targetWindow, targetWindow.isVisible {
+            guard let resolved = resolvedWorkspacePinTargetIncludingPopups(for: targetWindow) else {
+                return nil
+            }
+            let manager = activateMainWindowContext(resolved.context)
+            return (manager, resolved.workspace)
+        }
+
+        guard let manager = synchronizeActiveMainWindowContext(preferredWindow: targetWindow),
+              let workspace = manager.selectedWorkspace else {
+            return nil
+        }
+        return (manager, workspace)
     }
 
 #if DEBUG

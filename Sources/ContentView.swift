@@ -5472,7 +5472,7 @@ struct ContentView: View {
                 NSSound.beep()
                 return
             }
-            tabManager.setPinned(workspace, pinned: !workspace.isPinned)
+            tabManager.togglePin(tabId: workspace.id)
         }
         registry.register(commandId: "palette.nextWorkspace") {
             tabManager.selectNextTab()

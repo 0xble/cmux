@@ -600,15 +600,15 @@ struct cmuxApp: App {
                     _ = AppDelegate.shared?.requestRenameWorkspaceViaCommandPalette()
                 }
 
-                let isNonMainWindowFocused: Bool = {
+                let canPin: Bool = {
                     guard let keyWindow = NSApp.keyWindow else { return false }
-                    return AppDelegate.shared?.canPinWorkspace(from: keyWindow) != true
+                    return AppDelegate.shared?.canPinWorkspace(from: keyWindow) == true
                 }()
-                let workspacePinTarget = NSApp.keyWindow.flatMap {
-                    AppDelegate.shared?.workspaceForWorkspacePin(from: $0)
-                } ?? activeTabManager.selectedWorkspace
+                let workspacePinTarget = canPin
+                    ? activeTabManager.selectedWorkspace
+                    : nil
                 splitCommandButton(
-                    title: !isNonMainWindowFocused && workspacePinTarget?.isPinned == true
+                    title: canPin && workspacePinTarget?.isPinned == true
                         ? String(localized: "contextMenu.unpinWorkspace", defaultValue: "Unpin Workspace")
                         : String(localized: "contextMenu.pinWorkspace", defaultValue: "Pin Workspace"),
                     shortcut: toggleWorkspacePinMenuShortcut
@@ -617,7 +617,7 @@ struct cmuxApp: App {
                         preferredWindow: NSApp.keyWindow
                     )
                 }
-                .disabled(isNonMainWindowFocused)
+                .disabled(!canPin)
 
                 Divider()
 
@@ -870,7 +870,7 @@ struct cmuxApp: App {
 
     private func toggleSelectedWorkspacePinned(in manager: TabManager) {
         guard let workspace = manager.selectedWorkspace else { return }
-        manager.setPinned(workspace, pinned: !workspace.isPinned)
+        manager.togglePin(tabId: workspace.id)
     }
 
     private func clearSelectedWorkspaceCustomName(in manager: TabManager) {
