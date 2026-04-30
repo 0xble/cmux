@@ -8,8 +8,13 @@ APP_NAME="cmux.app"
 INSTALL_PATH="/Applications/$APP_NAME"
 DERIVED_DATA_PATH="$REPO/build"
 BUILD_APP="$DERIVED_DATA_PATH/Build/Products/Release/$APP_NAME"
+PINNED_ZIG_BIN="$HOME/.local/share/mise/installs/zig/0.15.2/bin"
 
 cd "$REPO"
+
+if [[ -x "$PINNED_ZIG_BIN/zig" ]]; then
+  export PATH="$PINNED_ZIG_BIN:$PATH"
+fi
 
 if [[ -f "$HOME/.config/secrets/local.env" ]]; then
   source "$HOME/.config/secrets/local.env"
@@ -28,6 +33,9 @@ fi
 
 echo "==> Unlocking build keychain"
 security unlock-keychain -p "$BUILD_KC_PASSWORD" "$BUILD_KC"
+
+echo "==> Preparing GhosttyKit"
+"$REPO/scripts/ensure-ghosttykit.sh"
 
 echo "==> Building Release with Developer ID signing"
 trash "$DERIVED_DATA_PATH" 2>/dev/null || true
